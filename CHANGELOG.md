@@ -2,6 +2,9 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.24.4
+- `tools/publish-github.sh`: checks that GitHub is reachable before preparing a release, and pushes a release that an earlier run prepared but could not push
+
 ## 1.24.3
 - New guide [docs/orcaslicer.md](docs/orcaslicer.md): connect OrcaSlicer, upload, print and log prints automatically, with troubleshooting
 

@@ -39,8 +39,19 @@ git -C "$PUB_DIR" config user.name "$GIT_NAME"
 git -C "$PUB_DIR" config user.email "$GIT_EMAIL"
 git -C "$PUB_DIR" pull -q --ff-only origin main 2>/dev/null || true
 
-if git -C "$PUB_DIR" rev-parse -q --verify "refs/tags/v$VER" >/dev/null; then
+if ! git -C "$PUB_DIR" ls-remote origin >/dev/null 2>&1; then
+  echo "cannot reach $GITHUB_REMOTE - check that the repository exists and that"
+  echo "  ssh -T git@github.com   answers with your GitHub user name"; exit 1
+fi
+if git -C "$PUB_DIR" ls-remote --exit-code --tags origin "refs/tags/v$VER" >/dev/null 2>&1; then
   echo "v$VER is already published - bump VERSION in app/app.py for a new release"; exit 1
+fi
+if git -C "$PUB_DIR" rev-parse -q --verify "refs/tags/v$VER" >/dev/null; then
+  # an earlier run committed and tagged this version but could not push it: push now
+  echo "== v$VER was prepared earlier but not pushed - pushing it now"
+  git -C "$PUB_DIR" push -q origin main
+  git -C "$PUB_DIR" push -q origin "v$VER"
+  echo "== published Z-Hop Deck $VER to $GITHUB_REMOTE"; exit 0
 fi
 
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
