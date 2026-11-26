@@ -2,6 +2,10 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.24.5
+- SECURITY.md: how to report a vulnerability privately
+- `tools/publish-github.sh`: uses your normal `ssh` (no own SSH options), `fetch` instead of `pull`, a 2-minute limit on every GitHub call with a message instead of hanging, progress lines, and it finishes a release whose commit reached GitHub but whose tag did not
+
 ## 1.24.4
 - `tools/publish-github.sh`: checks that GitHub is reachable before preparing a release, and pushes a release that an earlier run prepared but could not push
 
