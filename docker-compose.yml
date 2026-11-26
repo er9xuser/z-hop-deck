@@ -1,0 +1,22 @@
+# Z-Hop Deck - https://github.com/er9xuser/z-hop-deck
+# All site-specific values (passwords, IPs, paths) live in .env - that file is NOT in git.
+# First time:  cp .env.example .env && nano .env
+# Published image:   docker compose pull && docker compose up -d
+# Build it yourself: docker compose up -d --build
+services:
+  zhopdeck:
+    build: .
+    image: ${ZHOPDECK_IMAGE:-ghcr.io/er9xuser/z-hop-deck:latest}
+    container_name: zhopdeck
+    restart: unless-stopped
+    ports:
+      - "${PORT:-8080}:8080"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - TZ=${TZ:-UTC}
+    volumes:
+      - ./data:/data
+      - ${LIBRARY_PATH:-/home/print/printfiles}:/library
+    mem_limit: ${MEM_LIMIT:-2g}

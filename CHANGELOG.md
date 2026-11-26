@@ -1,0 +1,226 @@
+# Changelog
+
+Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
+
+## 1.24.3
+- New guide [docs/orcaslicer.md](docs/orcaslicer.md): connect OrcaSlicer, upload, print and log prints automatically, with troubleshooting
+
+## 1.24.2
+- PRIVACY.md: no telemetry, what the app connects to and what it stores
+- Example addresses in the settings forms no longer show a private domain; `install.sh` takes the time zone from the machine
+
+## 1.24.1
+- README: acknowledgements (Printventory, JusttPrint)
+
+## 1.24.0
+- Ready for GitHub: MIT license, English README, [installation](docs/installation.md) and [user guide](docs/user-guide.md) with screenshots, generic `.env.example`
+- Docker image built by GitHub Actions for amd64 and arm64: `ghcr.io/er9xuser/z-hop-deck` (`docker compose pull`); `docker compose up -d --build` still builds it yourself
+- Own background image: Settings → Appearance → *Upload background image* (stored as `data/background.jpg`); the bundled carbon photo of 1.21.5 is moved there automatically
+- `tools/publish-github.sh`: publishes a release to GitHub without private files
+
+## 1.23.0
+- Internal names renamed too: Docker service / container / image `zhopdeck`, folder `/opt/kontejner/zhopdeck`, repo `Z-Hop-Deck`, database `data/zhopdeck.db` (an existing `layerdeck.db` is renamed automatically on first start), backup and export file names
+- NAVODILA: chapter 6 - one-time switch from Layerdeck
+
+## 1.22.0
+- Renamed to **Z-Hop Deck** (Layerdeck is the name of an After Effects tool) with a new logo: nozzle hopping over the printed layers
+
+## 1.21.6
+- Carbon backgrounds: no full-width line under the library tabs
+
+## 1.21.5
+- Dark theme background: carbon photo (default), carbon pattern or plain - Settings → Appearance (remembered per browser)
+
+## 1.21.4
+- Carbon background redone as a real 2x2 twill weave (static/carbon.png) with a soft light sheen
+
+## 1.21.3
+- Dark theme: discreet carbon-fibre background behind the pages
+- Home: bigger library number cards
+
+## 1.21.2
+- 3D legend: filaments with the same name also show their colour code ("1 · Generic PLA · #FBEDD2")
+
+## 1.21.1
+- Home: clicking a model folder (newest / new in library) opens it in the library as thumbnails of its files, like in the library, instead of all parts in 3D
+- Fix: the 3D view kept a cached copy of a multi-colour model in the old format, so filament names did not show
+
+## 1.21.0
+- Multi-colour 3MF without a slicer picture get a preview rendered in their own filament colours (re-rendered once after updating)
+- 3D view legend shows filament number and name from the project (e.g. "1 · Bambu PLA Matte") instead of only the colour code
+
+## 1.20.0
+- 3D view shows multi-colour 3MF in colour: filament per object / part (Bambu Studio, OrcaSlicer, PrusaSlicer project files), painted triangles (`paint_color` / `mmu_segmentation`), and 3MF material colours (`basematerials`, `colorgroup`); colours come from the project's filament list, a legend shows them
+- The colour picker is hidden for multi-colour models
+
+## 1.19.3
+- Memory: freed memory is given back to the OS after every preview / 3D view (`malloc_trim`), `MALLOC_ARENA_MAX=2` in the image - an idle Layerdeck no longer sits at 1.5 GB after rendering big models
+- Crash guard also covers the 3D view of a file and "All parts in 3D": a model that crashed the server once answers "too large for the server's memory" instead of killing it again
+- "All parts in 3D" sends at most 1.5 M triangles
+
+## 1.19.2
+- Fix: the worker was killed again and again (out of memory) while rendering previews of large models / model folders
+  - preview renderer uses about a fifth of the memory (chunked drawing, float32 screen coordinates)
+  - model folder previews thin out every part right after loading instead of loading all parts in full first
+  - crash guard: if the process dies while working on a file or model folder, the next start skips it (marked
+    "preview skipped") instead of crashing in a loop; Settings → Regenerate all previews tries again
+
+## 1.19.1
+- Home: logo and "Layerdeck" instead of the greeting
+
+## 1.19.0
+- New Home page (start page, first in the menu): library numbers, last printed model, what the queue still needs, spools and when they run out, up next, new models, this month's prints, printer status
+- Library: collections as a row of category tiles (+ New), "ready to print / still to print" and "new this week" banners, tabs All · Printed · Unprinted · Queue · Favorites
+- Library: clicking a file opens a side panel (preview, folder images, Open in slicer, send, queue, log print, status, rating, details); "3D"/"Open" or a double click opens the full 3D view as before; model folders still open as thumbnails
+- Cards show designer (or folder) and status / "Ready to print" / "New" pills
+- API: `/api/home`; file list filters `added_days` and `in_queue`
+
+## 1.18.4
+- Request watchdog: a request running longer than 2 min is written to the log with its stack (`watchdog: … still running`); if most threads are stuck for 10 min the worker restarts by itself instead of hanging
+- 16 worker threads instead of 8 (`THREADS` in `.env`)
+- 3D viewer: gives up with an error after 60 s without an answer instead of spinning forever (STEP/OpenSCAD conversions get longer); releases the WebGL context when closed
+- NAVODILA: what to collect before restarting when Layerdeck hangs
+
+## 1.18.3
+- "Remove from collection…" in the file, model folder, selection and model-header menus (files stay in the library)
+
+## 1.18.2
+- Move dialog: "Add to collection" (existing or new) and a "keep in current folder" option to only add to a collection
+
+## 1.18.1
+- Drag a model folder or files onto a collection in the sidebar to add them to it (files stay in their folder)
+
+## 1.18.0
+- Cards and list rows show which collection(s) a file or model folder is in (coloured chip; click it to open the collection)
+- A model folder counts as in a collection when any of its files is; the model header shows its collections too
+- Model header menu: "Add all files to collection…"
+
+## 1.17.2
+- Upload: when a collection is open in the library, it is preselected in "Add to collection", so uploaded files land in that collection
+
+## 1.17.1
+- `install.sh`: one-step setup on a new Debian/Ubuntu machine or LXC (Docker, files user + library folder, `.env` with prompts, optional data restore, build, start, health check)
+- `.gitattributes` keeps Unix line endings for scripts
+
+## 1.17.0
+- Subfolders that contain only images/documents (e.g. images/ of a Printables download) are shown as folder cards instead of mixing their pictures into the model; images next to the models are still shown directly
+- Back (and Esc) from such a subfolder returns to the model
+- TXT and Markdown files open in a scrollable pop-up (Markdown with headings, lists, bold, links, code)
+
+## 1.16.0
+- Images and documents in a folder are shown as cards in the grid (after the models): photos as thumbnails, PDFs with a large PDF badge; inside a model folder also from subfolders like images/
+- Clicking an image opens a gallery (lightbox): ← → or swipe to browse, Esc to close, "open original"
+- Image cards use small cached previews generated by the server
+
+## 1.15.0
+- A folder (or ZIP) with only one model shows the folder name on its card; clicking still opens the file directly
+- Upload dialog: hint to drag folders in (the folder picker makes the browser ask for confirmation)
+
+## 1.14.3
+- Fix: after a STEP / OpenSCAD re-conversion the 3D view could still show the old cached mesh
+
+## 1.14.2
+- Fix: STEP files were converted in metres (0.1 mm models, tiny dot in the 3D view, empty model preview) – now millimetres; existing STEP files are converted again automatically
+
+## 1.14.1
+- Model folders: images and PDFs from subfolders (e.g. Printables zips with files/ and images/) are shown above the thumbnails
+
+## 1.14.0
+- STEP/STP files are converted to a mesh (OpenCASCADE via cascadio): preview, size, filament estimate, 3D view, Download STL. Runs in a separate process with a timeout; existing STEP files are converted once after the update.
+
+## 1.13.0
+- When a folder is open, its PDFs, text files and images are shown above the thumbnails – one click opens them in a new tab
+
+## 1.12.2
+- Security: write requests (POST/PUT/PATCH/DELETE) coming from another website are rejected (CSRF protection). Needed because trusted networks and proxy headers log you in without a cookie – a malicious page could otherwise have uploaded files or restored a database through your browser.
+
+## 1.12.1
+- G-code toolpath uses OrcaSlicer's colours (outer wall orange, inner wall yellow, top surface red, solid infill purple, brim navy …), shows a colour legend, and every other layer is slightly darker
+- Fix: toolpath colours looked washed out (sRGB colours were used as linear)
+
+## 1.12.0
+- OrcaSlicer "Device" tab shows the file you just uploaded for that printer (G-code preview, time, grams, live printer status, Open Mainsail); after 12 h or before any upload it opens the printer's web UI
+- Printers have a separate "Web address for the browser" (e.g. https://voron.example.lan) next to the address Layerdeck uses for data (the IP)
+- G-code files show a Printers box with live status, "Open Mainsail" and "Send"
+- Clear error instead of "Connected – unknown" when the printer address returns a web page (Authelia login / Mainsail) instead of data
+
+## 1.11.3
+- Fix: after deleting a file and adding a new one, the 3D / toolpath view could show the deleted file (the new file got the same id and the browser reused its cached preview). File ids are never reused now, and previews are cached by content.
+
+## 1.11.2
+- OrcaSlicer "Device" tab: the per-printer URL (`/p/<id>`) opens that printer's own web UI (Mainsail / Fluidd / OctoPrint)
+
+## 1.11.1
+- Each connected printer has its own upload URL for OrcaSlicer (`http://server:8080/p/<id>`) – put it in that printer's Orca profile and uploads always go to the right printer
+- Fix: changing two settings quickly saved only the last one (e.g. the printer for Orca uploads could be lost)
+- Fix: `/p/…` upload URLs now require the API key like `/api/…`
+
+## 1.11.0
+- **Automatic print log** for Klipper printers: finished, cancelled and failed prints are imported from Moonraker's job history (every minute) – duration, filament actually used, spools from Spoolman incl. multi-lane AFC prints, cost; file status updated, matching queue entry removed. Entries are marked "auto".
+- **OrcaSlicer upload**: Layerdeck acts as an OctoPrint-compatible print host (Orca host type "Octo/Klipper" + API key). Uploaded G-code is stored next to the model it was sliced from (re-slicing replaces it) and passed on to the printer – upload only by default, so the AFC lane can be chosen in Mainsail.
+
+## 1.10.5
+- Configuration moved to `.env` (template `.env.example`); `docker-compose.yml` has no passwords or IPs and is safe to keep in git
+- `.gitignore` (ignores `.env`, `data/`, caches)
+
+## 1.10.4
+- "Library" in the menu (and the Layerdeck logo) always returns to the start page with all models and files – leaves any open folder, search and filters
+
+## 1.10.3
+- Filament page: "Open Spoolman" opens the Spoolman start page instead of the "create spool" form
+
+## 1.10.2
+- Separate Spoolman address for the browser (Settings → Spoolman → "Address for the browser"), e.g. https via NPMplus while the server talks to Spoolman directly
+
+## 1.10.1
+- Spoolman over HTTPS with a self-signed certificate (NPMplus) works
+- Clear message when the Spoolman address returns a login page (Authelia) instead of data
+
+## 1.10.0
+- Fix: server-side previews showed back faces through the front (dark lines, notches) on models with long thin triangles – typical for OpenSCAD and CAD exports. Large triangles are now split before drawing, so the back-to-front order is correct.
+- Existing rendered previews (and model-folder previews) are regenerated automatically once after the update; slicer thumbnails and custom thumbnails are kept
+
+## 1.9.0
+- `TRUSTED_NETWORKS`: IPs/subnets that never need a password – works together with Authelia bypass rules (the real client IP is taken from X-Forwarded-For, but only when the request comes from `AUTH_PROXY_IPS`)
+
+## 1.8.0
+- Signed-in user and a Log out button at the bottom of the side menu
+- `LOGOUT_URL` (or Settings → Session): with Authelia, Log out ends the single sign-on session
+- With the app password, Log out ends the app session
+
+## 1.7.0
+- Clicking a model card opens its folder as thumbnails (pick a part from there); a single file still opens directly
+- Model bar above the folder: Back (Esc), All parts in 3D, Queue all, Zip, rename / tags / ungroup
+- Esc from a part returns to the folder, Esc again returns to the library at the same scroll position
+
+## 1.6.0
+- Spoolman integration: spools synced from Spoolman (every 5 min and when opening Filament), Spoolman spools are read-only here with a link to Spoolman
+- Printer card shows the spool loaded in Klipper (Moonraker `[spoolman]`), and "Log a print" pre-selects it
+- Optional: deduct filament in Spoolman when logging a print (off by default – Moonraker usually reports usage already)
+- Fix: OpenSCAD crashed with "Permission denied /root/.config/OpenSCAD" when running as PUID – the app now has its own writable home in /data/.home
+- Dark filament colours are visible on the spool rings
+
+## 1.5.0
+- OpenSCAD: `.scad` files are rendered to STL (preview, size, filament, 3D view, Download STL, Open in OrcaSlicer/Cura with the rendered STL), plus a Code tab with syntax highlighting
+- 3D view grid is at least 350×350 mm (Settings → Appearance) and grows automatically when a model is bigger
+
+## 1.4.0
+- App version shown discreetly in the top-right corner (in the side menu on phones)
+- Uploads report the exact reason for a failure: folder permissions (PUID/PGID), proxy upload limit (413), Authelia redirect, timeout
+- Browser caches are refreshed automatically after an update (versioned asset URLs)
+- Phone layout: two stat tiles per row, statistics no longer overflow, dialogs open from the bottom
+
+## 1.3.0
+- Model folders: an uploaded folder or ZIP becomes one model card with a combined preview, a 3D view of all parts, a parts list, and status/tags/queue for all parts at once
+- Sidebar right-click: "Treat as one model" / "Treat each subfolder as a model" / ungroup
+
+## 1.2.0
+- Single sign-on behind Authelia (trusted `Remote-User` header from `AUTH_PROXY_IPS`)
+- `PUBLIC_URL` for slicer links
+
+## 1.1.0
+- "Open in OrcaSlicer / Cura / PrusaSlicer / Bambu Studio"
+- Printer connections: Klipper/Moonraker, OctoPrint, PrusaLink – live status and "Send to printer"
+
+## 1.0.0
+- First release: library scan, uploads, previews, slicer metadata, 3D/G-code viewer, tags, collections, queue, print log, filament, cost, duplicates, statistics, backup

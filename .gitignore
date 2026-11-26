@@ -1,0 +1,12 @@
+# local configuration with passwords / IPs
+.env
+# database, thumbnails, trash, OpenSCAD cache
+data/
+# python
+__pycache__/
+*.pyc
+# editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
