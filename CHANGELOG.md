@@ -2,6 +2,9 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.24.6
+- Security hardening after the first CodeQL scan: the library root of every request is resolved to the configured folder (never the value sent by the browser) before any path is built; `safe_join` also rejects NUL bytes; unexpected errors in uploads and batch actions are logged on the server and reported to the browser as "internal error" instead of the raw exception text
+
 ## 1.24.5
 - SECURITY.md: how to report a vulnerability privately
 - `tools/publish-github.sh`: uses your normal `ssh` (no own SSH options), `fetch` instead of `pull`, a 2-minute limit on every GitHub call with a message instead of hanging, progress lines, and it finishes a release whose commit reached GitHub but whose tag did not

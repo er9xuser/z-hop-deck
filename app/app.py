@@ -33,7 +33,7 @@ logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("zhopdeck")
 
-VERSION = "1.24.5"  # bump on every release - shown in the UI
+VERSION = "1.24.6"  # bump on every release - shown in the UI
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "4096"))
 STATUSES = ["none", "want", "queued", "printing", "printed", "failed"]
@@ -174,6 +174,13 @@ app.secret_key = _secret_key()
 # --------------------------------------------------------------------------- helpers
 def body():
     return request.get_json(silent=True) or {}
+
+
+def public_error(e):
+    """Message of an expected error that is safe to show in the browser (no paths, no internals)."""
+    if isinstance(e, OSError):
+        return e.strerror or "file system error"
+    return str(e)[:300]
 
 
 def err(msg, code=400):
@@ -728,8 +735,11 @@ def batch():
             else:
                 return err("unknown action")
             done += 1
-        except Exception as e:
-            failed.append({"id": fid, "error": str(e)})
+        except (ValueError, OSError, lib.ScadError) as e:
+            failed.append({"id": fid, "error": public_error(e)})
+        except Exception:
+            log.exception("batch %s on file %s failed", action, fid)
+            failed.append({"id": fid, "error": "internal error - see the server log"})
     if action == "reanalyze":
         lib.request_analyze(ids, force_thumb=True)
     return jsonify({"done": done, "failed": failed})
@@ -934,9 +944,7 @@ def signed_download(token, _name):
 # --------------------------------------------------------------------------- upload & folders
 @app.post("/api/upload")
 def upload():
-    root = request.form.get("root") or lib.UPLOAD_ROOT
-    if root not in lib.LIBRARY_DIRS:
-        root = lib.LIBRARY_DIRS[0]
+    root = lib.library_root(request.form.get("root") or lib.UPLOAD_ROOT, lib.LIBRARY_DIRS[0])
     try:
         base = lib.safe_join(root, request.form.get("folder", ""))
     except ValueError as e:
@@ -993,9 +1001,9 @@ def upload():
         except OSError as e:
             log.error("upload %s: %s", raw, e)
             errors.append(f"{raw}: {e.strerror or e}")
-        except Exception as e:
+        except Exception:
             log.exception("upload %s failed", raw)
-            errors.append(f"{raw}: {e}")
+            errors.append(f"{raw}: internal error - see the server log")
     if ids:
         lib.request_analyze(ids)
     out = {"saved": saved, "skipped": skipped, "ids": ids, "errors": errors}
@@ -1013,7 +1021,7 @@ def list_bundles():
 @app.post("/api/bundles")
 def make_bundle():
     b = body()
-    root = b.get("root") if b.get("root") in lib.LIBRARY_DIRS else None
+    root = lib.library_root(b.get("root"))
     if not root or not (b.get("path") or "").strip("/"):
         return err("pick a folder inside the library")
     if b.get("subfolders"):
@@ -1050,9 +1058,12 @@ def bundle_detail(bid):
     else:
         d["prints"], d["in_queue"] = [], 0
     # images & documents anywhere inside the model folder
-    top = lib.safe_join(b["root"], b["path"])
+    try:
+        top = lib.safe_join(b["root"], b["path"])
+    except ValueError:  # library folder no longer configured
+        top = None
     att = []
-    for dp, dn, fn in os.walk(top):
+    for dp, dn, fn in (os.walk(top) if top else []):
         dn[:] = [x for x in dn if not x.startswith(".")]
         for x in sorted(fn):
             if lib.ext_of(x) in ATTACH_EXTS and not x.startswith("."):
@@ -1151,9 +1162,9 @@ def folders():
 def folder_attachments_api():
     """Images and documents directly in a folder, plus its subfolders that hold only images/documents
     (e.g. images/ of a Printables download) - those are shown as folder cards instead of being mixed in."""
-    root = request.args.get("root")
+    root = lib.library_root(request.args.get("root"))
     folder = (request.args.get("folder") or "").strip("/")
-    if root not in lib.LIBRARY_DIRS:
+    if root is None:
         return jsonify({"files": [], "folders": []})
     try:
         d = lib.safe_join(root, folder)
@@ -1195,9 +1206,9 @@ def folder_attachments_api():
 @app.get("/api/folders/thumb")
 def folder_thumb():
     """Small cached WEBP preview of an image in a library folder (for the grid)."""
-    root = request.args.get("root")
+    root = lib.library_root(request.args.get("root"))
     name = request.args.get("name", "")
-    if root not in lib.LIBRARY_DIRS or "\\" in name or any(x.startswith(".") for x in name.split("/")) \
+    if root is None or "\\" in name or any(x.startswith(".") for x in name.split("/")) \
             or lib.ext_of(name) not in lib.IMAGE_EXTS:
         abort(404)
     try:
@@ -1229,9 +1240,9 @@ def folder_thumb():
 
 @app.get("/api/folders/file")
 def folder_file():
-    root = request.args.get("root")
+    root = lib.library_root(request.args.get("root"))
     name = request.args.get("name", "")
-    if root not in lib.LIBRARY_DIRS or "\\" in name or any(x.startswith(".") for x in name.split("/")) \
+    if root is None or "\\" in name or any(x.startswith(".") for x in name.split("/")) \
             or lib.ext_of(name) not in ATTACH_EXTS:
         abort(404)
     try:
@@ -1246,7 +1257,7 @@ def folder_file():
 @app.post("/api/folders")
 def make_folder():
     b = body()
-    root = b.get("root") if b.get("root") in lib.LIBRARY_DIRS else lib.LIBRARY_DIRS[0]
+    root = lib.library_root(b.get("root"), lib.LIBRARY_DIRS[0])
     try:
         parts = [lib.clean_name(p) for p in (b.get("path") or "").replace("\\", "/").split("/") if p.strip()]
         p = lib.safe_join(root, "/".join(parts))

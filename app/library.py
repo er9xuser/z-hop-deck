@@ -98,11 +98,27 @@ def root_for(path):
     return None
 
 
+def library_root(value, default=None):
+    """The configured library root equal to `value` (the configured string itself, never the user's input),
+    or `default` when it is not one of them."""
+    for r in LIBRARY_DIRS:
+        if value == r:
+            return r
+    return default
+
+
 def safe_join(root, rel):
-    """Join a user-supplied relative path to root, refusing traversal."""
+    """Join a user-supplied relative path to a library root, refusing traversal ("..", absolute paths, NUL)."""
+    base = library_root(root)
+    if base is None:
+        if root not in (THUMB_DIR, TRASH_DIR, db.DATA_DIR) and not any(root.startswith(r + "/") for r in LIBRARY_DIRS):
+            raise ValueError("unknown library folder")
+        base = os.path.normpath(root)
     rel = (rel or "").replace("\\", "/").strip("/")
-    p = os.path.normpath(os.path.join(root, rel))
-    if p != root and not p.startswith(root.rstrip("/") + "/"):
+    if "\0" in rel:
+        raise ValueError("invalid path")
+    p = os.path.normpath(os.path.join(base, rel))
+    if p != base and not p.startswith(base.rstrip("/") + "/"):
         raise ValueError("path outside library")
     return p
 
