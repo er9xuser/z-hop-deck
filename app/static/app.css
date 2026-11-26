@@ -715,3 +715,11 @@ tr.peek td { background: var(--accent-soft); }
   .fresh-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 1250px) { .hgrid { align-items: start; } .hstatus > .hc { flex: none; } }
+/* home: printer reachability */
+.hc .pr .dot { border: 0; background: var(--line2); box-shadow: 0 0 0 3px color-mix(in srgb, var(--line2) 30%, transparent); }
+.hc .pr .dot.on { background: var(--teal); box-shadow: 0 0 0 3px color-mix(in srgb, var(--teal) 25%, transparent), 0 0 10px color-mix(in srgb, var(--teal) 60%, transparent); }
+.hc .pr .dot.busy { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); animation: pr-pulse 1.6s ease-in-out infinite; }
+.hc .pr .dot.off { background: var(--red); opacity: .75; box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 20%, transparent); }
+.hc .pr .dot.none { background: transparent; box-shadow: inset 0 0 0 2px var(--line2); }
+@keyframes pr-pulse { 50% { box-shadow: 0 0 0 6px transparent; } }
+.hc .pr .spc { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }

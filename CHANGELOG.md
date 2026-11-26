@@ -2,6 +2,9 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.25.2
+- Home → Printers: status light – green when the printer is reachable, pulsing orange while printing, red when it can't be reached, an empty ring for printers without a network connection; the loaded spool is shown as a colour dot next to its name
+
 ## 1.25.1
 - Home: Spools again lists the fullest spools first (as before 1.25.0); hovering a spool shows brand, material and its Spoolman number
 - Filament: each spool shows its Spoolman number, or "not in Spoolman" for spools that exist only in Z-Hop Deck

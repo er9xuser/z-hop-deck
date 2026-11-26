@@ -2699,7 +2699,7 @@ PAGES.home = async () => {
       </section>
       <section class="hc printers">
         <h5>Printers <a href="#/printers">Manage</a></h5>
-        ${d.printers.map(p => `<div class="pr" data-hp="${p.id}"><div><b>${esc(p.name)}</b><span class="muted small st">${p.conn_type ? 'checking…' : esc(p.model || 'not connected')}</span></div><span class="dot"></span></div>`).join('') || '<p class="muted small">No printers yet.</p>'}
+        ${d.printers.map(p => `<div class="pr" data-hp="${p.id}"><div><b>${esc(p.name)}</b><span class="muted small st">${p.conn_type ? 'checking…' : esc(p.model || 'not connected')}</span></div><span class="dot ${p.conn_type ? '' : 'none'}" title="${p.conn_type ? 'checking…' : 'no network connection set up'}"></span></div>`).join('') || '<p class="muted small">No printers yet.</p>'}
       </section>
       <section class="hc fresh">
         <h5>New in your library <span class="muted small" style="text-transform:none;letter-spacing:0">${d.new_week} this week</span></h5>
@@ -2722,8 +2722,10 @@ PAGES.home = async () => {
       const sp = st.active_spool;
       $('.st', row).textContent = st.connected ? `${st.state}${st.progress != null && st.state === 'printing' ? ' · ' + Math.round(st.progress * 100) + '%' : ''}${sp ? ' · ' + sp.name : ''}` : (st.state || 'offline');
       const dot = $('.dot', row);
-      dot.style.background = sp ? (sp.color || '#888') : 'transparent';
-      dot.classList.toggle('off', !st.connected);
+      const printing = st.connected && /print/i.test(st.state || '');
+      dot.classList.add(!st.connected ? 'off' : printing ? 'busy' : 'on');
+      dot.title = !st.connected ? 'not reachable' : printing ? 'printing' : 'online';
+      if (sp) $('.st', row).insertAdjacentHTML('afterbegin', `<i class="spc" style="background:${esc(sp.color || '#888')}"></i>`);
     }).catch(() => { });
   }
 };
