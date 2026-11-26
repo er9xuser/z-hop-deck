@@ -33,7 +33,7 @@ logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("zhopdeck")
 
-VERSION = "1.24.7"  # bump on every release - shown in the UI
+VERSION = "1.25.0"  # bump on every release - shown in the UI
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "4096"))
 STATUSES = ["none", "want", "queued", "printing", "printed", "failed"]
@@ -1761,7 +1761,7 @@ def home():
     st = db.settings()
     o = {}
     base_where = "f.missing=0"
-    g = grouped_items({"sort": "added", "order": "desc", "per": "4"}, base_where, [])
+    g = grouped_items({"sort": "added", "order": "desc", "per": "6"}, base_where, [])
     o["models"] = g["total"]
     o["new"] = g["items"]
     o["new_week"] = grouped_items({"per": "1"}, base_where + " AND f.added_at >= datetime('now','-7 days')", [])["total"]
@@ -1784,8 +1784,10 @@ def home():
     o["spool_total_g"] = round(sum(sp["remaining"] for sp in spools))
     o["spool_count"] = len(spools)
     o["spool_low"] = sum(1 for sp in spools if sp["remaining"] < low_g)
+    # the spools that run out first are the ones worth seeing on the home page
     o["spools"] = [{k: sp[k] for k in ("id", "name", "color", "material", "remaining", "weight_total")}
-                   for sp in sorted(spools, key=lambda x: -x["remaining"])[:6]]
+                   for sp in sorted(spools, key=lambda x: x["remaining"])[:6]]
+    o["spool_low_g"] = low_g
     # runs out soon: usage per spool over the last 30 days
     use = {r["spool_id"]: r["g"] for r in db.q("""SELECT spool_id, SUM(grams*copies) g FROM prints
             WHERE spool_id IS NOT NULL AND started_at >= datetime('now','-30 days') GROUP BY spool_id""")}
@@ -1822,6 +1824,14 @@ def home():
         if what:
             needs.append({"file_id": f["id"], "name": sf["display_name"], "needs": what})
     o["needs"] = needs[:5]
+    # nothing queued: suggest something you wanted to print, else the newest unprinted model
+    if not q:
+        sug = db.q1("""SELECT * FROM files WHERE missing=0 AND status='want' AND kind IN ('mesh','sliced','gcode','cad')
+                       ORDER BY added_at DESC LIMIT 1""") or \
+            db.q1("""SELECT * FROM files WHERE missing=0 AND status='none' AND kind IN ('mesh','sliced','gcode')
+                     ORDER BY added_at DESC LIMIT 1""")
+        if sug:
+            o["suggest"] = serialize(sug, [], st)
     # this month
     m = db.q1("""SELECT COUNT(*) n, COALESCE(SUM(grams*copies),0) g,
                  COALESCE(SUM(CASE WHEN result='success' THEN 1 ELSE 0 END),0) ok

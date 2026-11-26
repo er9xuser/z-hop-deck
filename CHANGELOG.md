@@ -2,6 +2,9 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.25.0
+- Home, tidier layout: the library card is lower with the numbers on top; "Needs you" and "Runs out soon" become one small "All good ✓" card when there is nothing to show; Spools lists the spools that run out first (low ones highlighted); "This month" says so when nothing was printed yet; an empty queue suggests a model from your want-to-print list (or the newest unprinted one) with *Add to queue*; "New in your library" shows six models across the full width
+
 ## 1.24.7
 - Path checks: `safe_join` written as the standard "normalise, then check the prefix" pattern; uploaded file names, G-code from OrcaSlicer and renamed files also go through it; a sub-folder base is normalised before it is checked
 

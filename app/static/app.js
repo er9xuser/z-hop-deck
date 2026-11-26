@@ -2665,43 +2665,49 @@ PAGES.home = async () => {
           ${hero ? `<a class="lib-show" href="${itemHash(hero)}" ${hero.type === 'bundle' ? `data-hb="${hero.id}"` : ''}><div class="th">${thumbOf(hero)}</div><span class="cap">${lp?.file ? 'Last printed' : 'Newest'}: <b>${esc(lp?.file ? hero.display_name : (hero.display_name || hero.name))}</b></span></a>` : ''}
         </div>
       </section>
-      <section class="hc needs ${d.needs.length ? '' : 'calm'}">
-        <h5>Needs you ${d.needs.length ? `<span class="nbadge">${d.needs.length}</span>` : ''}</h5>
-        ${d.needs.length ? d.needs.map(n => `<a class="need" href="#/queue"><b>${esc(n.name)}</b> needs ${esc(n.needs)}</a>`).join('')
-          : '<p>Nothing to fix – every queued print has the filament it needs.</p>'}
-      </section>
+      <div class="hstatus">
+        ${!d.needs.length && !d.runs_out.length ? `<section class="hc allgood"><h5>All good <span class="ok">✓</span></h5>
+          <p>Every queued print has the filament it needs, and no spool runs out in the next 90 days.</p></section>` : ''}
+        ${d.needs.length ? `<section class="hc needs"><h5>Needs you <span class="nbadge">${d.needs.length}</span></h5>
+          ${d.needs.map(n => `<a class="need" href="#/queue"><b>${esc(n.name)}</b> needs ${esc(n.needs)}</a>`).join('')}</section>` : ''}
+        ${d.runs_out.length ? `<section class="hc soon"><h5>Runs out soon</h5>
+          ${d.runs_out.map(r => `<div class="sp-row"><span class="dot" style="background:${esc(r.color || '#888')}"></span><span class="nm">${esc(r.name)}</span><b class="mono">${r.days} ${r.days === 1 ? 'day' : 'days'}</b></div>`).join('')}
+          <p class="muted small" style="margin-bottom:0">At the rate your logged prints used them over the last 30 days.</p></section>` : ''}
+      </div>
       <section class="hc spools">
         <h5>Spools <a href="#/filament">All ${d.spool_count}</a></h5>
         <div class="big">${d.spool_total_g >= 1000 ? (d.spool_total_g / 1000).toFixed(1) + '<small> kg</small>' : d.spool_total_g + '<small> g</small>'}</div>
-        <p class="muted small" style="margin:0 0 10px">${d.spool_low ? `${d.spool_low} running low` : 'none running low'}</p>
-        ${d.spools.map(sp => `<div class="sp-row">${ring(sp)}<span class="nm">${esc(sp.name)}</span><b class="mono">${fmt.g(sp.remaining)}</b></div>`).join('') || '<p class="muted small">No spools yet.</p>'}
-      </section>
-      <section class="hc soon">
-        <h5>Runs out soon</h5>
-        ${d.runs_out.length ? d.runs_out.map(r => `<div class="sp-row"><span class="dot" style="background:${esc(r.color || '#888')}"></span><span class="nm">${esc(r.name)}</span><b class="mono">${r.days} ${r.days === 1 ? 'day' : 'days'}</b></div>`).join('')
-          + '<p class="muted small">At the rate your logged prints used them over the last 30 days.</p>'
-          : '<p class="muted small">No spool runs out in the next 90 days at your current pace.</p>'}
+        <p class="muted small" style="margin:0 0 10px">${d.spool_low ? `<span class="low">${d.spool_low} running low</span> · ` : ''}lowest first</p>
+        ${d.spools.map(sp => `<div class="sp-row ${sp.remaining < d.spool_low_g ? 'is-low' : ''}">${ring(sp)}<span class="nm">${esc(sp.name)}</span><b class="mono">${fmt.g(sp.remaining)}</b></div>`).join('') || '<p class="muted small">No spools yet.</p>'}
       </section>
       <section class="hc upnext">
         <h5>Up next <a href="#/queue">Queue</a></h5>
         ${d.up_next ? `<a class="un" href="#/file/${d.up_next.file.id}"><div class="th">${thumbHtml(d.up_next.file)}</div><div><b>${esc(d.up_next.file.display_name)}</b>${d.up_next.copies > 1 ? ` <span class="muted">× ${d.up_next.copies}</span>` : ''}
-          <p class="muted small">${d.up_next.more ? `then ${d.up_next.more} more` : 'last one in the queue'}</p></div></a>` : '<p class="muted small">The queue is empty. Add models from the library.</p>'}
-      </section>
-      <section class="hc fresh">
-        <h5>New in your library <span class="muted small" style="text-transform:none;letter-spacing:0">${d.new_week} this week</span></h5>
-        <div class="fresh-row">${d.new.map(it => `<a href="${itemHash(it)}" ${it.type === 'bundle' ? `data-hb="${it.id}"` : ''}><div class="th">${thumbOf(it)}</div><span>${esc(it.display_name || it.name)}</span></a>`).join('') || '<p class="muted small">Nothing yet – upload your first model.</p>'}</div>
+          <p class="muted small">${d.up_next.more ? `then ${d.up_next.more} more` : 'last one in the queue'}</p></div></a>`
+          : d.suggest ? `<p class="muted small" style="margin-top:0">The queue is empty. How about:</p>
+            <a class="un" href="#/file/${d.suggest.id}"><div class="th">${thumbHtml(d.suggest)}</div><div><b>${esc(d.suggest.display_name)}</b>
+            <p class="muted small">${d.suggest.status === 'want' ? 'on your want-to-print list' : 'not printed yet'}</p></div></a>
+            <button class="btn sm" id="h-sugq" style="margin-top:10px">${I.queue} Add to queue</button>`
+          : `<p class="muted small">The queue is empty.</p><button class="btn sm" data-golib>${I.lib} Open the library</button>`}
       </section>
       <section class="hc month">
         <h5>This month</h5>
-        <div class="mnums"><div><b>${d.month.prints}</b><span>prints</span></div><div><b>${d.month.ok_pct == null ? '–' : d.month.ok_pct + '%'}</b><span>worked</span></div><div><b>${d.month.grams >= 1000 ? (d.month.grams / 1000).toFixed(1) + ' kg' : d.month.grams + ' g'}</b><span>filament</span></div></div>
-        <div class="wbars">${d.weeks.map((n, k) => `<div title="${k === 3 ? 'This week' : `${3 - k} week${3 - k > 1 ? 's' : ''} ago`}: ${n} prints"><i class="${k === 3 ? 'now' : ''}" style="height:${Math.max(6, Math.round(100 * n / maxW))}%"></i></div>`).join('')}</div>
+        ${d.month.prints ? `<div class="mnums"><div><b>${d.month.prints}</b><span>prints</span></div><div><b>${d.month.ok_pct == null ? '–' : d.month.ok_pct + '%'}</b><span>worked</span></div><div><b>${d.month.grams >= 1000 ? (d.month.grams / 1000).toFixed(1) + ' kg' : d.month.grams + ' g'}</b><span>filament</span></div></div>
+        <div class="wbars">${d.weeks.map((n, k) => `<div title="${k === 3 ? 'This week' : `${3 - k} week${3 - k > 1 ? 's' : ''} ago`}: ${n} prints"><i class="${k === 3 ? 'now' : ''}" style="height:${Math.max(6, Math.round(100 * n / maxW))}%"></i></div>`).join('')}</div>`
+          : `<p class="muted small" style="margin:0">No prints logged this month yet.</p>
+             <p class="muted small">Finished prints appear here automatically with the <a href="#/settings">automatic print log</a>, or log one from a model's panel.</p>`}
       </section>
       <section class="hc printers">
         <h5>Printers <a href="#/printers">Manage</a></h5>
         ${d.printers.map(p => `<div class="pr" data-hp="${p.id}"><div><b>${esc(p.name)}</b><span class="muted small st">${p.conn_type ? 'checking…' : esc(p.model || 'not connected')}</span></div><span class="dot"></span></div>`).join('') || '<p class="muted small">No printers yet.</p>'}
       </section>
+      <section class="hc fresh">
+        <h5>New in your library <span class="muted small" style="text-transform:none;letter-spacing:0">${d.new_week} this week</span></h5>
+        <div class="fresh-row">${d.new.map(it => `<a href="${itemHash(it)}" ${it.type === 'bundle' ? `data-hb="${it.id}"` : ''}><div class="th">${thumbOf(it)}</div><span>${esc(it.display_name || it.name)}</span></a>`).join('') || '<p class="muted small">Nothing yet – upload your first model.</p>'}</div>
+      </section>
     </div></div>`;
   const v = $('#view');
+  $('#h-sugq', v)?.addEventListener('click', async () => { await quickQueue(d.suggest); PAGES.home(); });
   const bundles = Object.fromEntries([...d.new, d.last_print?.file].filter(x => x?.type === 'bundle').map(b => [b.id, b]));
   v.onclick = e => {
     const hb = e.target.closest('[data-hb]');
