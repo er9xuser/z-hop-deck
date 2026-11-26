@@ -110,15 +110,17 @@ def library_root(value, default=None):
 def safe_join(root, rel):
     """Join a user-supplied relative path to a library root, refusing traversal ("..", absolute paths, NUL)."""
     base = library_root(root)
-    if base is None:
-        if root not in (THUMB_DIR, TRASH_DIR, db.DATA_DIR) and not any(root.startswith(r + "/") for r in LIBRARY_DIRS):
+    if base is None:  # a folder inside a library (e.g. the result of an earlier safe_join)
+        base = os.path.normpath(root or "")
+        if not any(base.startswith(r.rstrip("/") + "/") for r in LIBRARY_DIRS):
             raise ValueError("unknown library folder")
-        base = os.path.normpath(root)
     rel = (rel or "").replace("\\", "/").strip("/")
     if "\0" in rel:
         raise ValueError("invalid path")
     p = os.path.normpath(os.path.join(base, rel))
-    if p != base and not p.startswith(base.rstrip("/") + "/"):
+    if p == base:
+        return base
+    if not p.startswith(base.rstrip("/") + "/"):  # normalised path must stay below the base
         raise ValueError("path outside library")
     return p
 
@@ -843,7 +845,7 @@ def move_file(f, new_folder=None, new_name=None):
         name = f"{name}.{f['ext']}"
     dest_dir = safe_join(root, folder)
     os.makedirs(dest_dir, exist_ok=True)
-    dest = os.path.join(dest_dir, name)
+    dest = safe_join(dest_dir, name)
     if os.path.normpath(dest) == os.path.normpath(f["path"]):
         return
     dest = unique_path(dest)

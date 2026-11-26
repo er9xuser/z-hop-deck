@@ -2,6 +2,9 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.24.7
+- Path checks: `safe_join` written as the standard "normalise, then check the prefix" pattern; uploaded file names, G-code from OrcaSlicer and renamed files also go through it; a sub-folder base is normalised before it is checked
+
 ## 1.24.6
 - Security hardening after the first CodeQL scan: the library root of every request is resolved to the configured folder (never the value sent by the browser) before any path is built; `safe_join` also rejects NUL bytes; unexpected errors in uploads and batch actions are logged on the server and reported to the browser as "internal error" instead of the raw exception text
 

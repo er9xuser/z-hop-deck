@@ -33,7 +33,7 @@ logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("zhopdeck")
 
-VERSION = "1.24.6"  # bump on every release - shown in the UI
+VERSION = "1.24.7"  # bump on every release - shown in the UI
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "4096"))
 STATUSES = ["none", "want", "queued", "printing", "printed", "failed"]
@@ -964,7 +964,7 @@ def upload():
             if e not in lib.KINDS and e not in ATTACH_EXTS:
                 skipped.append(raw)
                 continue
-            target = os.path.join(base, *parts)
+            target = lib.safe_join(base, "/".join(parts))
             os.makedirs(os.path.dirname(target), exist_ok=True)
             target = lib.unique_path(target)
             up.save(target)
@@ -1470,7 +1470,7 @@ def octo_upload(pid=None):
     try:
         dest_dir = lib.safe_join(root, folder)
         os.makedirs(dest_dir, exist_ok=True)
-        target = os.path.join(dest_dir, name)
+        target = lib.safe_join(dest_dir, name)
         tmp = target + ".uploading"
         up.save(tmp)
         os.replace(tmp, target)  # re-slicing the same model replaces the old G-code
