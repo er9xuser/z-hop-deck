@@ -1829,7 +1829,10 @@ function uploadError(x, data) {
 const OK_EXT = /\.(stl|3mf|obj|step|stp|iges|igs|f3d|scad|blend|fcstd|skp|dxf|dwg|gcode|gco|g|bgcode|zip|jpe?g|png|webp|gif|pdf|txt|md)$/i;
 function openUpload(initial = []) {
   let files = [];
-  const curFolder = S.f.root && S.f.folder != null ? S.f.root + '|' + S.f.folder : (S.folders[0]?.root || '') + '|';
+  // inside an open model folder a new upload goes NEXT to that model, not into it (it would become one of its parts)
+  const openModel = insideBundle() ? bundleAt(S.f.root, S.f.folder) : null;
+  const curFolder = openModel ? openModel.root + '|' + openModel.path.split('/').slice(0, -1).join('/')
+    : S.f.root && S.f.folder != null ? S.f.root + '|' + S.f.folder : (S.folders[0]?.root || '') + '|';
   const m = modal({ title: 'Upload to library', size: 'lg', body: `
     <div class="dropzone" id="dz">${I.upload}<b>Drop files or folders here</b><span>or <a href="#" id="pick-files">choose files</a> · <a href="#" id="pick-dir">choose a folder</a></span>
       <span class="small" style="display:block;margin-top:6px;opacity:.75">Tip: drag a folder from Explorer – "choose a folder" makes the browser ask for confirmation.</span>
@@ -1838,6 +1841,8 @@ function openUpload(initial = []) {
       <label class="fld"><span>Destination folder</span><select id="u-folder">${folderOptions(curFolder)}</select></label>
       <label class="fld"><span>New subfolder (optional)</span><input type="text" id="u-sub" placeholder="e.g. Printables/Dragon"></label>
     </div>
+    <div class="box small hidden" id="u-model-hint" style="padding:8px 12px;border-color:var(--yellow);color:var(--text2)"></div>
+    ${openModel ? `<label class="check small" style="margin-top:-4px"><input type="checkbox" id="u-into"> Add the files to the open model <b>${esc(openModel.name)}</b> as new parts</label>` : ''}
     <div class="grid2"><label class="fld"><span>Tags for uploaded files</span><div id="u-tags"></div></label>
       <label class="fld"><span>Add to collection</span><select id="u-coll"><option value="">—</option>${S.collections.map(c => `<option value="${c.id}" ${S.f.collection == c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label></div>
     <div class="row wrap" style="gap:18px"><label class="check"><input type="checkbox" id="u-bundle" ${store.get('bundleFolders', true) ? 'checked' : ''}> Each uploaded folder / ZIP is one model</label>
@@ -1846,6 +1851,21 @@ function openUpload(initial = []) {
     <div class="up-list" id="u-list"></div>`,
     buttons: [{ label: 'Close' }, { label: 'Upload', cls: 'primary', onClick: async ({ el }) => { await run(el); return false; } }] });
   const el = m.el;
+  const modelHint = () => {
+    const [r, fo] = $('#u-folder', el).value.split('|');
+    const sub = $('#u-sub', el).value.trim().replace(/^\/+|\/+$/g, '');
+    const b = bundleAt(r, [fo, sub].filter(Boolean).join('/'));
+    const hint = $('#u-model-hint', el);
+    hint.classList.toggle('hidden', !b);
+    if (b) hint.innerHTML = `This folder belongs to the model <b>${esc(b.name)}</b> – uploaded files become parts of it.`;
+  };
+  $('#u-folder', el).onchange = () => { if ($('#u-into', el)) $('#u-into', el).checked = false; modelHint(); };
+  $('#u-sub', el).oninput = modelHint;
+  $('#u-into', el)?.addEventListener('change', e => {
+    $('#u-folder', el).value = e.target.checked ? openModel.root + '|' + openModel.path : curFolder;
+    modelHint();
+  });
+  modelHint();
   const ti = tagInput([], () => { });
   $('#u-tags', el).append(ti.el);
   const add = list => {
@@ -2682,10 +2702,10 @@ PAGES.home = async () => {
       </section>
       <section class="hc upnext">
         <h5>Up next <a href="#/queue">Queue</a></h5>
-        ${d.up_next ? `<a class="un" href="#/file/${d.up_next.file.id}"><div class="th">${thumbHtml(d.up_next.file)}</div><div><b>${esc(d.up_next.file.display_name)}</b>${d.up_next.copies > 1 ? ` <span class="muted">× ${d.up_next.copies}</span>` : ''}
+        ${d.up_next ? `<a class="un" href="#/file/${d.up_next.file.id}"><div class="th">${thumbHtml(d.up_next.file)}</div><div><b title="${esc(d.up_next.file.display_name)}">${esc(d.up_next.file.display_name)}</b>${d.up_next.copies > 1 ? ` <span class="muted">× ${d.up_next.copies}</span>` : ''}
           <p class="muted small">${d.up_next.more ? `then ${d.up_next.more} more` : 'last one in the queue'}</p></div></a>`
           : d.suggest ? `<p class="muted small" style="margin-top:0">The queue is empty. How about:</p>
-            <a class="un" href="#/file/${d.suggest.id}"><div class="th">${thumbHtml(d.suggest)}</div><div><b>${esc(d.suggest.display_name)}</b>
+            <a class="un" href="#/file/${d.suggest.id}"><div class="th">${thumbHtml(d.suggest)}</div><div><b title="${esc(d.suggest.display_name)}">${esc(d.suggest.display_name)}</b>
             <p class="muted small">${d.suggest.status === 'want' ? 'on your want-to-print list' : 'not printed yet'}</p></div></a>
             <button class="btn sm" id="h-sugq" style="margin-top:10px">${I.queue} Add to queue</button>`
           : `<p class="muted small">The queue is empty.</p><button class="btn sm" data-golib>${I.lib} Open the library</button>`}

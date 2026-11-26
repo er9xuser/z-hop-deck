@@ -2,6 +2,10 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.25.3
+- Fix: uploading while a model folder was open put the new files INTO that model (they became its parts). The upload now goes next to the open model; tick *Add the files to the open model* to really add parts, and a note warns whenever the chosen folder belongs to a model
+- Home → Up next: long model names are cut with "…" instead of running out of the card
+
 ## 1.25.2
 - Home → Printers: status light – green when the printer is reachable, pulsing orange while printing, red when it can't be reached, an empty ring for printers without a network connection; the loaded spool is shown as a colour dot next to its name
 

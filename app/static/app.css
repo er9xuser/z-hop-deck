@@ -723,3 +723,8 @@ tr.peek td { background: var(--accent-soft); }
 .hc .pr .dot.none { background: transparent; box-shadow: inset 0 0 0 2px var(--line2); }
 @keyframes pr-pulse { 50% { box-shadow: 0 0 0 6px transparent; } }
 .hc .pr .spc { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+/* home: long names in Up next must not run out of the card */
+.upnext { min-width: 0; overflow: hidden; }
+.un { min-width: 0; }
+.un > div { min-width: 0; flex: 1; }
+.un b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
