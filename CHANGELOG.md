@@ -2,6 +2,10 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.25.1
+- Home: Spools again lists the fullest spools first (as before 1.25.0); hovering a spool shows brand, material and its Spoolman number
+- Filament: each spool shows its Spoolman number, or "not in Spoolman" for spools that exist only in Z-Hop Deck
+
 ## 1.25.0
 - Home, tidier layout: the library card is lower with the numbers on top; "Needs you" and "Runs out soon" become one small "All good ✓" card when there is nothing to show; Spools lists the spools that run out first (low ones highlighted); "This month" says so when nothing was printed yet; an empty queue suggests a model from your want-to-print list (or the newest unprinted one) with *Add to queue*; "New in your library" shows six models across the full width
 

@@ -2082,7 +2082,7 @@ PAGES.filament = async () => {
     ${list.length ? `<div class="spools">${list.map(s => {
       const rem = Math.max(0, s.weight_total - s.weight_used), pct = s.weight_total ? rem / s.weight_total : 0;
       return `<div class="spool ${s.archived ? 'archived' : ''}" data-s="${s.id}">${spoolRing(s)}<div class="info"><div class="nm">${esc(s.name)}${s.spoolman_id ? ` <span class="badge" style="color:var(--teal)" title="Synced from Spoolman">#${s.spoolman_id}</span>` : ''}</div>
-        <div class="meta">${esc([s.brand, s.material, s.diameter + ' mm'].filter(Boolean).join(' · '))}</div>
+        <div class="meta">${esc([s.brand, s.material, s.diameter + ' mm', s.spoolman_id ? 'Spoolman #' + s.spoolman_id : (S.settings.spoolman_url ? 'not in Spoolman' : '')].filter(Boolean).join(' · '))}</div>
         <div class="rem">${fmt.g(rem)} <span class="muted small">/ ${fmt.g(s.weight_total)}</span></div>
         <div class="meter"><i style="width:${pct * 100}%;background:${pct < 0.15 ? 'var(--red)' : esc(s.color)}"></i></div>
         <div class="muted small" style="margin-top:6px">${fmt.money((s.price || 0) / (s.weight_total || 1000) * 1000)}/kg</div></div></div>`;
@@ -2093,7 +2093,7 @@ function editSpool(s) {
   if (s?.spoolman_id) {
     const url = spoolmanWeb();
     const rem = Math.max(0, s.weight_total - s.weight_used);
-    return modal({ title: s.name, body: `<div class="row" style="gap:14px">${spoolRing(s)}<div><div class="muted small">${esc([s.brand, s.material, s.diameter + ' mm'].filter(Boolean).join(' · '))}</div>
+    return modal({ title: s.name, body: `<div class="row" style="gap:14px">${spoolRing(s)}<div><div class="muted small">${esc([s.brand, s.material, s.diameter + ' mm', s.spoolman_id ? 'Spoolman #' + s.spoolman_id : (S.settings.spoolman_url ? 'not in Spoolman' : '')].filter(Boolean).join(' · '))}</div>
         <div class="mono" style="font-size:18px;margin-top:4px">${fmt.g(rem)} <span class="muted small">/ ${fmt.g(s.weight_total)}</span></div>
         <div class="muted small">${fmt.money((s.price || 0) / (s.weight_total || 1000) * 1000)}/kg · density ${s.density}</div></div></div>
       <p class="muted small" style="margin:0">This spool is managed in Spoolman (#${s.spoolman_id}). Edit it there – changes appear here after the next sync.</p>`,
@@ -2677,8 +2677,8 @@ PAGES.home = async () => {
       <section class="hc spools">
         <h5>Spools <a href="#/filament">All ${d.spool_count}</a></h5>
         <div class="big">${d.spool_total_g >= 1000 ? (d.spool_total_g / 1000).toFixed(1) + '<small> kg</small>' : d.spool_total_g + '<small> g</small>'}</div>
-        <p class="muted small" style="margin:0 0 10px">${d.spool_low ? `<span class="low">${d.spool_low} running low</span> · ` : ''}lowest first</p>
-        ${d.spools.map(sp => `<div class="sp-row ${sp.remaining < d.spool_low_g ? 'is-low' : ''}">${ring(sp)}<span class="nm">${esc(sp.name)}</span><b class="mono">${fmt.g(sp.remaining)}</b></div>`).join('') || '<p class="muted small">No spools yet.</p>'}
+        <p class="muted small" style="margin:0 0 10px">${d.spool_low ? `${d.spool_low} running low` : 'none running low'}</p>
+        ${d.spools.map(sp => `<div class="sp-row" title="${esc([sp.brand, sp.material, sp.spoolman_id ? 'Spoolman #' + sp.spoolman_id : 'local spool'].filter(Boolean).join(' · '))}">${ring(sp)}<span class="nm">${esc(sp.name)}</span><b class="mono">${fmt.g(sp.remaining)}</b></div>`).join('') || '<p class="muted small">No spools yet.</p>'}
       </section>
       <section class="hc upnext">
         <h5>Up next <a href="#/queue">Queue</a></h5>

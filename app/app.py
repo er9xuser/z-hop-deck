@@ -33,7 +33,7 @@ logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("zhopdeck")
 
-VERSION = "1.25.0"  # bump on every release - shown in the UI
+VERSION = "1.25.1"  # bump on every release - shown in the UI
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "4096"))
 STATUSES = ["none", "want", "queued", "printing", "printed", "failed"]
@@ -1784,9 +1784,8 @@ def home():
     o["spool_total_g"] = round(sum(sp["remaining"] for sp in spools))
     o["spool_count"] = len(spools)
     o["spool_low"] = sum(1 for sp in spools if sp["remaining"] < low_g)
-    # the spools that run out first are the ones worth seeing on the home page
-    o["spools"] = [{k: sp[k] for k in ("id", "name", "color", "material", "remaining", "weight_total")}
-                   for sp in sorted(spools, key=lambda x: x["remaining"])[:6]]
+    o["spools"] = [{k: sp[k] for k in ("id", "name", "brand", "color", "material", "remaining", "weight_total", "spoolman_id")}
+                   for sp in sorted(spools, key=lambda x: -x["remaining"])[:6]]
     o["spool_low_g"] = low_g
     # runs out soon: usage per spool over the last 30 days
     use = {r["spool_id"]: r["g"] for r in db.q("""SELECT spool_id, SUM(grams*copies) g FROM prints
