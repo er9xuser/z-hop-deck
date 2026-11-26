@@ -33,7 +33,7 @@ logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("zhopdeck")
 
-VERSION = "1.25.3"  # bump on every release - shown in the UI
+VERSION = "1.25.4"  # bump on every release - shown in the UI
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "4096"))
 STATUSES = ["none", "want", "queued", "printing", "printed", "failed"]
@@ -577,14 +577,16 @@ def grouped_items(a, where, params):
         b, rows = lib.bundle_parts(g["bid"])
         if not b or not rows:
             continue
-        if len(rows) == 1:  # a one-file model: show the file (opens directly), named after its folder
+        if len(rows) == 1 and not folder_has_docs(b):  # one file, nothing else: show the file (opens directly)
             one = serialize(rows[0], tags_for([rows[0]["id"]]).get(rows[0]["id"]), st)
             if not rows[0]["title"]:
                 one["display_name"] = b["name"]
             one["model_name"] = b["name"]
             items.append(one)
         else:
-            items.append(serialize_bundle(b, rows, st))
+            it = serialize_bundle(b, rows, st)
+            it["docs"] = folder_has_docs(b)
+            items.append(it)
     return {"items": attach_colls(items), "total": total, "page": page, "per": per, "grouped": True}
 
 
@@ -631,6 +633,22 @@ def file_detail(fid):
 
 
 ATTACH_EXTS = lib.IMAGE_EXTS | {"pdf", "txt", "md"}
+
+
+def folder_has_docs(b):
+    """True when a model folder also holds pictures or documents (PDF, readme...) - then it is shown as a folder,
+    so they can be seen next to the model."""
+    try:
+        top = lib.safe_join(b["root"], b["path"])
+    except ValueError:
+        return False
+    for depth, (dp, dn, fn) in enumerate(os.walk(top)):
+        dn[:] = [x for x in dn if not x.startswith(".")]
+        if any(lib.ext_of(x) in ATTACH_EXTS and not x.startswith(".") for x in fn):
+            return True
+        if depth > 20:
+            break
+    return False
 
 
 def folder_attachments(f):

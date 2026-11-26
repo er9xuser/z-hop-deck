@@ -637,7 +637,7 @@ function bundleCardHtml(b, i) {
   return `<div class="card bundle ${isSel(b) ? 'sel' : ''}" data-i="${i}" data-id="b${b.id}" draggable="true">
     <div class="th"><img src="/api/bundles/${b.id}/thumb?v=${b.thumb_v}" loading="lazy" decoding="async" alt="" onerror="this.style.visibility='hidden'">
       <div class="tl"><span class="cb">${I.check}</span></div>
-      <div class="tr">${b.favorite ? `<span class="fav">${I.star.replace('<svg', '<svg width="17" height="17"')}</span>` : ''}<span class="badge model">${b.models} parts</span></div>
+      <div class="tr">${b.favorite ? `<span class="fav">${I.star.replace('<svg', '<svg width="17" height="17"')}</span>` : ''}<span class="badge model">${b.models === 1 ? 'model' : b.models + ' parts'}${b.docs ? ' + docs' : ''}</span></div>
       ${b.status !== 'none' ? `<div class="stbar ${st.cls}" title="${st.label}"></div>` : ''}
     </div>
     <div class="body"><div class="nm" title="${esc(b.folder)}">${I.stack.replace('<svg', '<svg width="13" height="13" style="vertical-align:-2px;color:var(--accent);margin-right:4px"')}${esc(b.name)}</div>${pillsHtml(b)}<div class="sub">${sub.join('')}</div>${collChips(b)}
@@ -672,7 +672,7 @@ function rowHtml(f, i) {
   const st = STATUS[f.status] || STATUS.none;
   if (f.type === 'bundle') return `<tr class="clickable ${isSel(f) ? 'sel' : ''}" data-i="${i}" data-id="b${f.id}" draggable="true">
     <td style="width:52px"><img class="thumb-s" src="/api/bundles/${f.id}/thumb?v=${f.thumb_v}" loading="lazy" onerror="this.style.visibility='hidden'"></td>
-    <td><div style="font-weight:600">${I.stack.replace('<svg', '<svg width="13" height="13" style="vertical-align:-2px;color:var(--accent)"')} ${esc(f.name)}</div><div class="muted small mono">${esc(f.folder)} · ${f.models} parts</div>${collChips(f, 3)}</td>
+    <td><div style="font-weight:600">${I.stack.replace('<svg', '<svg width="13" height="13" style="vertical-align:-2px;color:var(--accent)"')} ${esc(f.name)}</div><div class="muted small mono">${esc(f.folder)} · ${f.models === 1 ? '1 part' : f.models + ' parts'}</div>${collChips(f, 3)}</td>
     <td><span class="badge model">model</span></td>
     <td class="hide-m"><span class="stdot ${st.cls}"></span> <span class="small">${st.label}</span></td>
     <td class="hide-m">${f.tags.slice(0, 3).map(t => tagChip(t)).join(' ')}</td>
@@ -2591,6 +2591,7 @@ async function savePanel(patch) {
 function renderPanel() {
   const host = $('#lib-panel'), f = panelState.f;
   const imgs = (f.attachments || []).filter(a => isImgExt(a.ext));
+  const docs = (f.attachments || []).filter(a => ['pdf', 'txt', 'md'].includes(a.ext));
   const aUrl = a => `/api/files/${f.id}/attachment/${encodeURIComponent(a.name)}`;
   const sl = slicersFor(f);
   const last = (f.prints || [])[0];
@@ -2617,6 +2618,7 @@ function renderPanel() {
     <div class="lp-img">${f.thumb > 0 ? `<img src="/api/files/${f.id}/thumb?v=${f.thumb_v}" alt="" class="${f.thumb === 4 ? 'photo' : ''}">` : `<div class="ph">${(KIND_ICON[f.kind] || I.cube).replace('<svg', '<svg width="64" height="64"')}<span>${esc(f.ext)}</span></div>`}
       <button class="icon-btn lp-exp" data-full title="Open full view">${I.expand}</button>
       ${can3d ? `<button class="btn sm lp-3d" data-full>${I.cube} ${f.kind === 'gcode' || f.kind === 'sliced' ? 'Toolpath' : '3D'}</button>` : ''}</div>
+    ${docs.length ? `<div class="lp-docs">${docs.slice(0, 8).map((a, k) => `<button class="btn sm" data-doc="${k}" title="${esc(a.name)}"><span class="badge">${esc(a.ext)}</span>${esc(a.name.replace(/\.[^.]+$/, ''))}</button>`).join('')}</div>` : ''}
     ${imgs.length ? `<div class="lp-gal">${imgs.slice(0, 8).map((a, k) => `<button data-img="${k}"><img src="${aUrl(a)}" loading="lazy" alt=""></button>`).join('')}</div>` : ''}
     <div class="lp-box">
       <h4>Model details</h4>
@@ -2648,6 +2650,10 @@ function renderPanel() {
   $$('#lp-stars [data-r]', host).forEach(b => b.onclick = () => savePanel({ rating: f.rating == b.dataset.r ? 0 : +b.dataset.r }));
   $('#lp-folder', host).onclick = e => { e.preventDefault(); closePanel(); S.f = { ...S.f, root: f.root, folder: f.folder, collection: '', tag: [], q: '', kind: '', status: '', tab: '', added_days: 0 }; renderLibraryTop(); applyFilters(); };
   $$('[data-img]', host).forEach(b => b.onclick = () => openLightbox(imgs[+b.dataset.img], imgs, aUrl));
+  $$('[data-doc]', host).forEach(b => b.onclick = () => {
+    const a = docs[+b.dataset.doc];
+    if (a.ext === 'pdf') window.open(aUrl(a), '_blank', 'noopener'); else openTextViewer(aUrl(a), a.name, a.ext);
+  });
   $('#lp-more', host).onclick = e => { const it = S.items.find(x => x.type !== 'bundle' && x.id === f.id) || { ...f, collections: f.collections || [] }; fileMenu(it, e.clientX, e.clientY); };
   host.onclick = e => {
     const c = e.target.closest('[data-coll-f]'); if (c) { closePanel(); openCollection(c.dataset.collF); return; }

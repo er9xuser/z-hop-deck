@@ -728,3 +728,6 @@ tr.peek td { background: var(--accent-soft); }
 .un { min-width: 0; }
 .un > div { min-width: 0; flex: 1; }
 .un b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lp-docs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.lp-docs .btn { max-width: 100%; overflow: hidden; text-overflow: ellipsis; justify-content: flex-start; }
+.lp-docs .badge { text-transform: uppercase; font-size: 9.5px; padding: 1px 5px; }
