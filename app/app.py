@@ -33,7 +33,7 @@ logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("zhopdeck")
 
-VERSION = "1.25.9"  # bump on every release - shown in the UI
+VERSION = "1.25.10"  # bump on every release - shown in the UI
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "4096"))
 STATUSES = ["none", "want", "queued", "printing", "printed", "failed"]
@@ -925,13 +925,17 @@ def _signer():
 def file_link(fid):
     """Short-lived public download URL, so a desktop slicer can fetch the file without logging in."""
     f = get_file(fid)
-    rendered = f["ext"] == "scad"  # slicers get the rendered STL of an OpenSCAD file
+    rendered = 0
+    if f["ext"] == "scad":  # slicers get the rendered STL of an OpenSCAD file
+        rendered = 1
+    elif f["ext"] in lib.STEP_EXTS and request.args.get("stl") == "1":  # slicer without STEP import (Cura)
+        rendered = 2
     if rendered:
         try:
-            lib.scad_stl(f)
+            lib.scad_stl(f) if rendered == 1 else lib.step_stl(f)
         except lib.ScadError as e:
             return err(str(e), 422)
-    token = _signer().dumps([fid, 1 if rendered else 0])
+    token = _signer().dumps([fid, rendered])
     base = PUBLIC_URL or request.host_url.rstrip("/")
     name = f["name"].rsplit(".", 1)[0] + ".stl" if rendered else f["name"]
     from urllib.parse import quote
@@ -950,7 +954,7 @@ def signed_download(token, _name):
     f = get_file(fid)
     if rendered:
         try:
-            return send_file(lib.scad_stl(f), as_attachment=True, download_name=f["name"].rsplit(".", 1)[0] + ".stl",
+            return send_file(lib.scad_stl(f) if rendered == 1 else lib.step_stl(f), as_attachment=True, download_name=f["name"].rsplit(".", 1)[0] + ".stl",
                              mimetype="application/octet-stream")
         except lib.ScadError:
             abort(404)

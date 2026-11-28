@@ -2245,21 +2245,23 @@ function editPrinter(p) {
 /* ============================================================ slicers & sending */
 const SLICERS = {
   orcaslicer: { name: 'OrcaSlicer', url: 'orcaslicer://open?file=', exts: ['stl', '3mf', 'obj', 'step', 'stp', 'scad'] },
-  cura: { name: 'Cura', url: 'cura://open?file=', exts: ['stl', '3mf', 'obj', 'scad'] },
+  cura: { name: 'Cura', url: 'cura://open?file=', exts: ['stl', '3mf', 'obj', 'scad', 'step', 'stp'], asStl: ['step', 'stp'] }, // Cura can't import STEP: it gets the converted STL
   prusaslicer: { name: 'PrusaSlicer', url: 'prusaslicer://open?file=', exts: ['stl', '3mf', 'obj', 'step', 'stp', 'scad'] },
   bambustudio: { name: 'Bambu Studio', url: 'bambustudio://open?file=', exts: ['stl', '3mf', 'obj', 'step', 'stp', 'scad'] },
 };
 function slicersFor(f) {
   const on = (S.settings.slicers || '').split(',').filter(Boolean);
   if (f.ext === 'scad' && f.dim_x == null) return []; // OpenSCAD file that couldn't be rendered
-  return on.filter(k => SLICERS[k] && SLICERS[k].exts.includes(f.ext));
+  const converted = f.dim_x != null; // STEP that Z-Hop Deck could turn into a mesh
+  return on.filter(k => SLICERS[k] && SLICERS[k].exts.includes(f.ext) && (converted || !(SLICERS[k].asStl || []).includes(f.ext)));
 }
 async function openInSlicer(f, key) {
   const sl = SLICERS[key];
   try {
-    const { url } = await api(`/files/${f.id}/link`, { method: 'POST' });
+    const asStl = (sl.asStl || []).includes(f.ext);
+    const { url } = await api(`/files/${f.id}/link${asStl ? '?stl=1' : ''}`, { method: 'POST' });
     window.location.href = sl.url + encodeURIComponent(url);
-    toast(f.ext === 'scad' ? `Rendered STL opening in ${sl.name}…` : `Opening in ${sl.name}…`);
+    toast(f.ext === 'scad' || asStl ? `Converted STL opening in ${sl.name}…` : `Opening in ${sl.name}…`);
   } catch (e) { fail(e); }
 }
 const connectedPrinters = () => S.printers.filter(p => p.conn_type);

@@ -2,6 +2,9 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.25.10
+- STEP files: *Open in Cura* now works too – Cura can't import STEP, so it gets the STL Z-Hop Deck converted. With OrcaSlicer + Cura enabled the ▾ menu now also shows up on STEP files (OrcaSlicer / PrusaSlicer / Bambu Studio still get the original STEP)
+
 ## 1.25.9
 - Live refresh: Library and Home update by themselves when a file is added (upload, OrcaSlicer, scan) or a preview finishes – no more F5. The page asks for a tiny fingerprint every 8 s (2 s while working), stops completely while the browser tab is hidden, and never refreshes while a dialog is open, you are typing or cards are selected
 
