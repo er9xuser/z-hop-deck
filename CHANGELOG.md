@@ -2,6 +2,9 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.26.5
+- Security (CodeQL #41, #42): printer status no longer passes exception text to the browser – an offline printer shows a fixed reason (*cannot reach the printer*, *access denied – check the API key*, *timeout* …); the full error is written to the container log once
+
 ## 1.26.4
 - Security (CodeQL): the live-view G-code endpoint no longer returns exception text; details are written to the container log
 

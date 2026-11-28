@@ -34,7 +34,7 @@ logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("zhopdeck")
 
-VERSION = "1.26.4"  # bump on every release - shown in the UI
+VERSION = "1.26.5"  # bump on every release - shown in the UI
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "4096"))
 STATUSES = ["none", "want", "queued", "printing", "printed", "failed"]
@@ -1449,6 +1449,30 @@ _status_cache = {}  # printer id -> (time, status) - shared by all open pages, s
 _status_lock = threading.Lock()
 
 
+_PRINTER_REASONS = (
+    ("access denied", "access denied – check the API key"),
+    ("timeout", "the printer did not answer (timeout)"),
+    ("cannot reach", "cannot reach the printer"),
+    ("web page", "got a web page instead of printer data – use the printer's IP address as address"),
+    ("no address", "no address configured"),
+    ("no connection", "no connection configured"),
+    ("HTTP", "the printer answered with an error"),
+)
+_last_reason = {}
+
+
+def printer_reason(p, e):
+    """Fixed, safe text for the browser (never the exception text itself); the details go to the log once."""
+    m = str(e)
+    if _last_reason.get(p["id"]) != m:
+        _last_reason[p["id"]] = m
+        log.info("printer %s: %s", p["name"], m)
+    for key, text in _PRINTER_REASONS:
+        if key in m:
+            return text
+    return "printer error (see the container log)"
+
+
 def cached_status(p, max_age=4.0):
     now = time.time()
     hit = _status_cache.get(p["id"])
@@ -1458,7 +1482,7 @@ def cached_status(p, max_age=4.0):
     try:
         st = dict(prn.status(p), connected=True)
     except prn.PrinterError as e:
-        st = {"connected": False, "state": "offline", "error": str(e)}
+        st = {"connected": False, "state": "offline", "error": printer_reason(p, e)}
     with _status_lock:
         _status_cache[p["id"]] = (time.time(), st)
     return st
