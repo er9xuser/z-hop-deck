@@ -2500,17 +2500,41 @@ async function pollScan(force) {
     ind.innerHTML = `<div class="row" style="justify-content:space-between"><span>${st.last_scan ? 'Scanned ' + esc(st.last_scan.slice(11, 16)) : 'Ready'}</span><button class="btn ghost sm" id="scan-now" title="Scan library folders now">${I.refresh}</button></div>`;
     $('#scan-now').onclick = async () => { await api('/scan', { method: 'POST' }); pollScan(true); };
   }
+  const changed = S._libSig != null && st.lib_sig && st.lib_sig !== S._libSig;
+  if (st.lib_sig) S._libSig = st.lib_sig;
   if (lastScanState === 'busy' && !busy) {
     await loadMeta(); renderNav();
     if (S.route === 'library' && !detailState) { renderSideLibrary(); refreshVisible(); }
+    else if (S.route === 'home') liveRefresh();
     if (detailState?.f && !detailState.f.analyzed) openDetail(detailState.id);
-  } else if (busy && S.route === 'library' && !detailState && st.state === 'analyzing' && (++S._tick % 3 === 0)) {
-    refreshVisible(); // show previews as they come in
+  } else if (changed) {
+    liveRefresh(busy); // new upload / new previews (also when the work was too short to be seen as "busy")
   }
   lastScanState = busy ? 'busy' : 'idle';
-  scanTimer = setTimeout(pollScan, busy ? 2000 : 20000);
+  // polling is one tiny request; while the tab is hidden it stops completely
+  if (!document.hidden) scanTimer = setTimeout(pollScan, busy ? 2000 : 8000);
 }
 S._tick = 0;
+let liveBusy = false;
+async function liveRefresh(busy) {
+  // never pull the page away under the user: not while a dialog is open, text is typed or cards are selected
+  if (liveBusy || $('.modal-bg') || S.selected?.size) return;
+  const ae = document.activeElement;
+  if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT')) return;
+  liveBusy = true;
+  try {
+    if (S.route === 'library' && !detailState && $('#cards-host')) {
+      if (busy && ++S._tick % 2) return; // during a long analysis: every 2nd change is plenty
+      await refreshVisible();
+      if (!busy) { await loadMeta(); renderNav(); renderSideLibrary(); }
+    } else if (S.route === 'home') {
+      const y = $('#view').scrollTop;
+      await PAGES.home(undefined, true);
+      $('#view').scrollTop = y;
+    }
+  } catch { } finally { liveBusy = false; }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) pollScan(); });
 
 /* ============================================================ library: collections row, banners, tabs */
 const LIB_TABS = [['', 'All models', I.grid], ['printed', 'Printed', I.check], ['unprinted', 'Unprinted', I.cube], ['queue', 'Queue', I.queue], ['fav', 'Favorites', I.heart]];
@@ -2662,13 +2686,13 @@ function renderPanel() {
 }
 
 /* ============================================================ home */
-PAGES.home = async () => {
+PAGES.home = async (_arg, quiet) => {
   topbar('Home', `<span class="spacer"></span><button class="btn" id="h-lib">${I.lib}<span class="hide-m">Library</span></button><button class="btn primary" id="upload-btn">${I.upload}<span class="hide-m">Upload</span></button>`);
   $('#h-lib').onclick = goLibraryHome;
   $('#upload-btn').onclick = () => openUpload();
-  $('#view').innerHTML = `<div class="page home"><div class="spinner" style="margin:60px auto"></div></div>`;
+  if (!quiet) $('#view').innerHTML = `<div class="page home"><div class="spinner" style="margin:60px auto"></div></div>`;
   let d;
-  try { d = await api('/home'); } catch (e) { fail(e); return; }
+  try { d = await api('/home'); } catch (e) { if (!quiet) fail(e); return; }
   if (S.route !== 'home') return;
   const qn = d.queue_copies;
   const thumbOf = it => it.type === 'bundle' ? `<img src="/api/bundles/${it.id}/thumb?v=${it.thumb_v}" alt="" loading="lazy">` : thumbHtml(it);

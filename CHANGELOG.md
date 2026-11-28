@@ -2,6 +2,9 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.25.9
+- Live refresh: Library and Home update by themselves when a file is added (upload, OrcaSlicer, scan) or a preview finishes – no more F5. The page asks for a tiny fingerprint every 8 s (2 s while working), stops completely while the browser tab is hidden, and never refreshes while a dialog is open, you are typing or cards are selected
+
 ## 1.25.8
 - Fusion 360 `.f3d` / `.f3z`: the preview picture Fusion saves inside the file is used as the thumbnail (`.f3z` is now recognised too). Existing files are re-analysed once
 

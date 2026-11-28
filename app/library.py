@@ -76,6 +76,11 @@ def get_status():
         s = dict(status)
     s["pending_analysis"] = (db.q1("SELECT COUNT(*) n FROM files WHERE missing=0 AND analyzed<?",
                                    (ANALYZER_VERSION,)) or {"n": 0})["n"]
+    # cheap fingerprint of the library: changes when a file is added / removed / analysed / gets a new preview,
+    # so open pages can refresh themselves without reloading everything on a timer
+    r = db.q1("SELECT COUNT(*) n, COALESCE(MAX(id),0) mx, COALESCE(SUM(analyzed),0) an, COALESCE(SUM(thumb),0) th, "
+              "COALESCE(SUM(mtime),0) mt FROM files WHERE missing=0") or {}
+    s["lib_sig"] = f"{r.get('n')}.{r.get('mx')}.{r.get('an')}.{r.get('th')}.{int(r.get('mt') or 0)}"
     return s
 
 
