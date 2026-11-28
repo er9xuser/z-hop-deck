@@ -80,7 +80,12 @@ def get_status():
     # so open pages can refresh themselves without reloading everything on a timer
     r = db.q1("SELECT COUNT(*) n, COALESCE(MAX(id),0) mx, COALESCE(SUM(analyzed),0) an, COALESCE(SUM(thumb),0) th, "
               "COALESCE(SUM(mtime),0) mt FROM files WHERE missing=0") or {}
-    s["lib_sig"] = f"{r.get('n')}.{r.get('mx')}.{r.get('an')}.{r.get('th')}.{int(r.get('mt') or 0)}"
+    pr = db.q1("SELECT COUNT(*) n, COALESCE(MAX(id),0) mx FROM prints") or {}
+    q = db.q1("SELECT COUNT(*) n FROM queue") or {}
+    st = db.q1("SELECT COUNT(*) n FROM files WHERE missing=0 AND status='printed'") or {}
+    # ...plus prints / queue / printed status, so Home's numbers follow an automatically logged print
+    s["lib_sig"] = (f"{r.get('n')}.{r.get('mx')}.{r.get('an')}.{r.get('th')}.{int(r.get('mt') or 0)}"
+                    f".{pr.get('n')}.{pr.get('mx')}.{q.get('n')}.{st.get('n')}")
     return s
 
 
