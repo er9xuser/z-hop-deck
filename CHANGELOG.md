@@ -2,6 +2,10 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.26.1
+- Library: the file a printer is printing right now gets a pulsing **Printing 42 %** pill (also on its model folder card), no matter where the print was started (Mainsail, OrcaSlicer, Z-Hop Deck). Checked every ~15 s while the Library is open; the file is matched by name (and size if there are several)
+- Printer status is cached for a few seconds and shared by all open pages; an unreachable printer is asked less often
+
 ## 1.26.0
 - **Live print view on Home**: while a Klipper (Moonraker) or OctoPrint printer prints, the Printers card shows the running job's toolpath – printed part in the slicer's feature colours, the rest as a ghost – growing with the print (exact file position, else the layer info / Z). Layer and Z underneath, drag to turn. The G-code is fetched from the printer once per job and cached (`data/jobcache`, last 4); updates are a small status request every 5 s, the drawing is done in the browser. Polling stops on other pages and when the tab is hidden
 - Home → Printers: status refreshes by itself (5 s while printing, 30 s otherwise) and shows the time left

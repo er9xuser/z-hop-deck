@@ -645,9 +645,15 @@ function bundleCardHtml(b, i) {
     ${b.tags.length ? `<div class="tags-mini">${b.tags.slice(0, 4).map(t => tagChip(t)).join('')}</div>` : ''}</div></div>`;
 }
 const isNew = it => it.added_at && (Date.now() - new Date(it.added_at.replace(' ', 'T') + 'Z')) < 7 * 864e5;
+function printingOf(it) {
+  for (const id of idsOf(it)) { const x = S.printing?.[id]; if (x) return x; }
+  return null;
+}
 function pillsHtml(it) {
   const p = [];
-  if (it.status && it.status !== 'none') p.push(`<span class="pill-s ${STATUS[it.status]?.cls || ''}">${STATUS[it.status]?.label || it.status}</span>`);
+  const pr = printingOf(it);
+  if (pr) p.push(`<span class="pill-s live" title="${esc(pr.printer)}${pr.remaining_s ? ' · ' + fmtLeft(pr.remaining_s) + ' left' : ''}"><i></i>${/paus/i.test(pr.state) ? 'Paused' : 'Printing'} ${Math.round(pr.progress * 100)}%</span>`);
+  else if (it.status && it.status !== 'none') p.push(`<span class="pill-s ${STATUS[it.status]?.cls || ''}">${STATUS[it.status]?.label || it.status}</span>`);
   else if (it.kind === 'gcode' || it.kind === 'sliced') p.push('<span class="pill-s ready">Ready to print</span>');
   if (isNew(it)) p.push('<span class="pill-s new">New</span>');
   return p.length ? `<div class="pills">${p.join('')}</div>` : '';
@@ -2513,11 +2519,22 @@ async function pollScan(force) {
   } else if (changed) {
     liveRefresh(busy); // new upload / new previews (also when the work was too short to be seen as "busy")
   }
+  if (S.route === 'library' && S.printers?.some(p => p.conn_type) && Date.now() - (S._prAt || 0) > 14000) { S._prAt = Date.now(); pollPrinting(); }
   lastScanState = busy ? 'busy' : 'idle';
   // polling is one tiny request; while the tab is hidden it stops completely
   if (!document.hidden) scanTimer = setTimeout(pollScan, busy ? 2000 : 8000);
 }
 S._tick = 0;
+async function pollPrinting() {
+  let list;
+  try { list = await api('/printing'); } catch { return; }
+  const m = {};
+  for (const x of list) if (x.file_id) m[x.file_id] = x;
+  const key = o => JSON.stringify(Object.entries(o).map(([k, v]) => [k, Math.round(v.progress * 100), v.state]));
+  const changed = key(m) !== key(S.printing || {});
+  S.printing = m;
+  if (changed && S.route === 'library' && !detailState && $('#cards-host')) renderList(true);
+}
 let liveBusy = false;
 async function liveRefresh(busy) {
   // never pull the page away under the user: not while a dialog is open, text is typed or cards are selected
@@ -2807,7 +2824,7 @@ async function homePrinters() {
   for (const k of [...LIVE.keys()]) if (!list.some(p => p.id === k)) disposeLive(k);
   if (S.route === 'home' && !document.hidden) homePoll = setTimeout(homePrinters, printing ? 5000 : 30000);
 }
-const fmtLeft = s => s >= 3600 ? `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min` : `${Math.max(1, Math.round(s / 60))} min`;
+function fmtLeft(s) { return s >= 3600 ? `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min` : `${Math.max(1, Math.round(s / 60))} min`; }
 function liveView(p, st, row, busy) {
   let L = LIVE.get(p.id);
   if (!busy || !st.file || st.live === false) { if (L) disposeLive(p.id); return; }

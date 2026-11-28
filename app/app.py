@@ -1,4 +1,5 @@
 """Z-Hop Deck - self-hosted 3D print library."""
+import concurrent.futures
 import csv
 import io
 import ipaddress
@@ -33,7 +34,7 @@ logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("zhopdeck")
 
-VERSION = "1.26.0"  # bump on every release - shown in the UI
+VERSION = "1.26.1"  # bump on every release - shown in the UI
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "4096"))
 STATUSES = ["none", "want", "queued", "printing", "printed", "failed"]
@@ -1444,15 +1445,54 @@ def get_printer(pid):
     return p
 
 
+_status_cache = {}  # printer id -> (time, status) - shared by all open pages, so printers aren't asked twice
+_status_lock = threading.Lock()
+
+
+def cached_status(p, max_age=4.0):
+    now = time.time()
+    hit = _status_cache.get(p["id"])
+    # an unreachable printer costs a full timeout per question: ask it less often
+    if hit and now - hit[0] < (max_age if hit[1].get("connected") else max(max_age, 25.0)):
+        return hit[1]
+    try:
+        st = dict(prn.status(p), connected=True)
+    except prn.PrinterError as e:
+        st = {"connected": False, "state": "offline", "error": str(e)}
+    with _status_lock:
+        _status_cache[p["id"]] = (time.time(), st)
+    return st
+
+
+@app.get("/api/printing")
+def printing_now():
+    """Which library files are being printed right now (any start: Z-Hop Deck, Mainsail, OrcaSlicer...)."""
+    out = []
+    ps = [p for p in db.q("SELECT * FROM printers") if p.get("conn_type") in ("moonraker", "octoprint", "prusalink")]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, min(8, len(ps)))) as ex:
+        sts = list(ex.map(lambda p: cached_status(p, 8.0), ps)) if ps else []
+    for p, st in zip(ps, sts):
+        if not st.get("connected") or not re.search(r"print|paus", st.get("state") or "", re.I) or not st.get("file"):
+            continue
+        base = os.path.basename(st["file"])
+        rows = db.q("SELECT id, size FROM files WHERE name=? AND missing=0 ORDER BY mtime DESC", (base,))
+        if st.get("file_size"):  # several files with that name: prefer the one with the same size
+            same = [r for r in rows if r["size"] == st["file_size"]]
+            rows = same or rows
+        out.append({"printer_id": p["id"], "printer": p["name"], "state": st["state"], "file": st["file"],
+                    "progress": st.get("progress") or 0, "remaining_s": st.get("remaining_s"),
+                    "file_id": rows[0]["id"] if rows else None})
+    return jsonify(out)
+
+
 @app.get("/api/printers/<int:pid>/status")
 def printer_status(pid):
     p = get_printer(pid)
     if not p.get("conn_type"):
         return jsonify({"connected": False, "state": "not connected"})
-    try:
-        st = dict(prn.status(p), connected=True)
-    except prn.PrinterError as e:
-        return jsonify({"connected": False, "state": "offline", "error": str(e)})
+    st = dict(cached_status(p, 2.0))
+    if not st.get("connected"):
+        return jsonify(st)
     if st.get("spoolman_spool_id"):
         sp = db.q1("SELECT id, name, color, material, weight_total, weight_used FROM spools WHERE spoolman_id=?",
                    (st["spoolman_spool_id"],))
