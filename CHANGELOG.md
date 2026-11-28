@@ -2,6 +2,9 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.25.5
+- Fix: a normal restart (update, `docker compose up`, LXC reboot) while a preview was being made was reported as *"the server ran out of memory on this file"* and the preview was skipped for good. Z-Hop Deck now checks the container's OOM-kill counter: after a plain restart the file is simply done again; only a real out-of-memory kill (or dying 3 times on the same file) skips it. Files marked by older versions are retried once automatically
+
 ## 1.25.4
 - A model folder with only one model plus a PDF / pictures / readme is now shown as a folder card ("model + docs") instead of a lone STL card; the details panel lists the PDF and text files (PDF opens in a new tab)
 

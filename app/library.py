@@ -395,7 +395,7 @@ def _busy(what):
 
 
 def _idle(what):
-    db.ex("DELETE FROM settings WHERE key=?", ("busy:" + what,))
+    db.ex("DELETE FROM settings WHERE key IN (?, ?)", ("busy:" + what, "retry:" + what))
 
 
 def guarded(what):
@@ -414,10 +414,67 @@ def skipped(key, ident):
     return str(ident) in (db.setting(key) or "").split(",")
 
 
+def _oom_kills():
+    """How many processes the kernel OOM-killed in this container (cgroup v2 / v1), or None if unknown."""
+    try:
+        with open("/sys/fs/cgroup/memory.events") as fh:
+            for line in fh:
+                k, _, v = line.partition(" ")
+                if k == "oom_kill":
+                    return int(v)
+    except (OSError, ValueError):
+        pass
+    try:
+        with open("/sys/fs/cgroup/memory/memory.oom_control") as fh:
+            for line in fh:
+                k, _, v = line.partition(" ")
+                if k == "oom_kill":
+                    return int(v)
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def _container_id():
+    return os.environ.get("HOSTNAME") or os.uname().nodename
+
+
+def _died_of_oom():
+    """Was the previous run killed for memory - or just stopped (update, docker restart, LXC reboot)?
+    A gunicorn worker killed by the OOM killer is restarted inside the SAME container, whose cgroup counts the
+    kill. A recreated / restarted container starts from a clean count, so that was a normal restart."""
+    now = _oom_kills()
+    ref = db.setting("oom_ref") or ""
+    cid, _, old = ref.rpartition(":")
+    if now is None or not ref:
+        return True            # can't tell: be safe, as before
+    if cid != _container_id():
+        return False           # new container -> it was stopped / recreated, not killed
+    try:
+        return now > int(old)
+    except ValueError:
+        return True
+
+
 def _recover_from_crash():
-    for r in db.q("SELECT key FROM settings WHERE key LIKE 'busy:%'"):
-        db.ex("DELETE FROM settings WHERE key=?", (r["key"],))
-        _recover_one(r["key"][5:])
+    busy = [r["key"] for r in db.q("SELECT key FROM settings WHERE key LIKE 'busy:%'")]
+    oom = bool(busy) and _died_of_oom()
+    for key in busy:
+        db.ex("DELETE FROM settings WHERE key=?", (key,))
+        what = key[5:]
+        tries = int(db.setting("retry:" + what) or 0) + 1
+        if oom or tries >= 3:  # really out of memory - or it keeps dying on this one: stop trying
+            db.ex("DELETE FROM settings WHERE key=?", ("retry:" + what,))
+            _recover_one(what)
+        else:                  # interrupted by a restart: just do it again
+            db.set_setting("retry:" + what, str(tries))
+            log.warning("previous run was stopped while working on %s - will try it again", what)
+            kind, _, ident = what.partition(":")
+            if kind == "file" and ident.isdigit():
+                db.ex("UPDATE files SET analyzed=0 WHERE id=?", (int(ident),))
+    n = _oom_kills()
+    if n is not None:
+        db.set_setting("oom_ref", f"{_container_id()}:{n}")
 
 
 def _recover_one(what):
@@ -637,6 +694,9 @@ def request_rethumb_all():
 
 def start_background():
     _recover_from_crash()
+    if db.setting("oom_recheck") != "1":  # 1.25.5: older versions took every restart for "out of memory" - retry those once
+        db.ex("UPDATE files SET analyzed=0, error=NULL WHERE error LIKE 'preview skipped: the server ran out of memory%'")
+        db.set_setting("oom_recheck", "1")
     if db.setting("render_ver") != RENDER_VERSION:  # renderer improved: redo rendered previews (not slicer images)
         db.ex("UPDATE files SET analyzed=0 WHERE missing=0 AND thumb IN (0,1)")
         db.set_setting("render_ver", RENDER_VERSION)
