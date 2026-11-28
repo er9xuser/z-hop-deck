@@ -34,7 +34,7 @@ logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("zhopdeck")
 
-VERSION = "1.26.12"  # bump on every release - shown in the UI
+VERSION = "1.26.13"  # bump on every release - shown in the UI
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "4096"))
 STATUSES = ["none", "want", "queued", "printing", "printed", "failed"]
@@ -1932,6 +1932,46 @@ def duplicates():
         out.append({"sha256": g["sha256"], "size": g["size"], "wasted": g["size"] * (g["n"] - 1),
                     "files": [dict(serialize(r, tg.get(r["id"]), st), path=r["path"]) for r in rows]})
     return jsonify(out)
+
+
+@app.post("/api/duplicates/resolve")
+def resolve_duplicates():
+    """Keep one copy, move everything that hangs on the others over to it, then trash the others.
+    Body: {"keep": id, "delete": [ids]} or {"groups": [{"keep": id, "delete": [...]}, ...]}."""
+    b = body()
+    groups = b.get("groups") or [{"keep": b.get("keep"), "delete": b.get("delete") or []}]
+    rank = {"none": 0, "want": 1, "queued": 2, "failed": 3, "printing": 4, "printed": 5}
+    removed = 0
+    for g in groups:
+        keep = db.q1("SELECT * FROM files WHERE id=? AND missing=0", (num(g.get("keep"), 0, int),))
+        if not keep:
+            continue
+        others = [db.q1("SELECT * FROM files WHERE id=?", (num(i, 0, int),)) for i in g.get("delete") or []]
+        others = [o for o in others if o and o["id"] != keep["id"] and o["sha256"] and o["sha256"] == keep["sha256"]]
+        for o in others:  # only byte-identical copies, never anything else
+            with db.tx():
+                db.ex("INSERT OR IGNORE INTO file_tags(file_id, tag_id) SELECT ?, tag_id FROM file_tags WHERE file_id=?",
+                      (keep["id"], o["id"]))
+                db.ex("INSERT OR IGNORE INTO collection_files(collection_id, file_id) SELECT collection_id, ? "
+                      "FROM collection_files WHERE file_id=?", (keep["id"], o["id"]))
+                db.ex("UPDATE prints SET file_id=? WHERE file_id=?", (keep["id"], o["id"]))
+                db.ex("UPDATE queue SET file_id=? WHERE file_id=?", (keep["id"], o["id"]))
+                upd = {}
+                if rank.get(o["status"] or "none", 0) > rank.get(keep["status"] or "none", 0):
+                    upd["status"] = o["status"]
+                if (o["rating"] or 0) > (keep["rating"] or 0):
+                    upd["rating"] = o["rating"]
+                if o["favorite"] and not keep["favorite"]:
+                    upd["favorite"] = 1
+                for k in ("notes", "designer", "license", "source_url", "title"):
+                    if o[k] and not keep[k]:
+                        upd[k] = o[k]
+                if upd:
+                    db.ex(f"UPDATE files SET {', '.join(k + '=?' for k in upd)} WHERE id=?", (*upd.values(), keep["id"]))
+                    keep = {**keep, **upd}
+            lib.trash_file(o)
+            removed += 1
+    return jsonify({"removed": removed})
 
 
 @app.get("/api/home")

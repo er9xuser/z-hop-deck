@@ -2324,26 +2324,50 @@ PAGES.duplicates = async () => {
   $('#view').innerHTML = '<div class="page"><div class="spinner"></div></div>';
   const groups = await api('/duplicates');
   const wasted = groups.reduce((a, g) => a + g.wasted, 0);
+  const t = f => new Date((f.added_at || '').replace(' ', 'T') + 'Z').getTime() || 0;
+  // same second -> the lower id was found first
+  const older = (x, y) => t(x) < t(y) || (t(x) === t(y) && x.id < y.id);
+  const oldest = g => g.files.reduce((a, f) => older(f, a) ? f : a);
+  const newest = g => g.files.reduce((a, f) => older(a, f) ? f : a);
+  const path = f => `${f.folder ? f.folder + '/' : ''}${f.name}`;
   $('#view').innerHTML = `<div class="page wide"><p class="lead">Files with byte-identical content (SHA-256). ${groups.length ? `<b>${groups.length}</b> groups · <b>${fmt.bytes(wasted)}</b> could be freed.` : ''}</p>
-    ${groups.length ? groups.map(g => `<div class="dupe-group" data-sha="${g.sha256}"><div class="hd"><b>${g.files.length} copies</b><span class="muted">${fmt.bytes(g.size)} each</span><span class="spacer"></span>
-      <button class="btn sm" data-keep>Keep oldest, delete others</button></div>
-      <div class="dupe-files">${g.files.map((f, i) => `<div class="dupe-file">${f.thumb > 0 ? `<img src="/api/files/${f.id}/thumb?v=${f.thumb_v}" loading="lazy">` : '<div></div>'}
-        <div style="min-width:0"><a href="#/file/${f.id}"><b>${esc(f.display_name)}</b></a>${i === 0 ? ' <span class="badge" style="color:var(--teal)">oldest</span>' : ''}<div class="p">${esc(f.root)}/${esc(f.folder ? f.folder + '/' : '')}${esc(f.name)}</div>
+    ${groups.length > 1 ? `<div class="row wrap" style="gap:8px;margin:-4px 0 16px"><span class="muted small">All groups at once:</span><button class="btn sm" data-all="oldest">Keep oldest everywhere</button><button class="btn sm" data-all="newest">Keep newest everywhere</button></div>` : ''}
+    ${groups.length ? groups.map(g => { const o = oldest(g), n = newest(g); return `<div class="dupe-group" data-sha="${g.sha256}"><div class="hd"><b>${g.files.length} copies</b><span class="muted">${fmt.bytes(g.size)} each</span><span class="spacer"></span>
+      <button class="btn sm" data-keep="${o.id}">Keep oldest</button><button class="btn sm" data-keep="${n.id}">Keep newest</button></div>
+      <div class="dupe-files">${g.files.map(f => `<div class="dupe-file">${f.thumb > 0 ? `<img src="/api/files/${f.id}/thumb?v=${f.thumb_v}" loading="lazy">` : '<div></div>'}
+        <div style="min-width:0"><a href="#/file/${f.id}"><b>${esc(f.display_name)}</b></a>${f === o ? ' <span class="badge" style="color:var(--teal)">oldest</span>' : ''}${f === n && g.files.length > 1 ? ' <span class="badge" style="color:var(--blue)">newest</span>' : ''}<div class="p">${esc(f.root)}/${esc(path(f))}</div>
         <div class="muted small">${f.tags.length ? f.tags.map(t => esc(t.name)).join(', ') + ' · ' : ''}added ${fmt.date(f.added_at)}</div></div>
-        <button class="icon-btn" data-del="${f.id}" title="Delete this copy">${I.trash}</button></div>`).join('')}</div></div>`).join('')
+        <button class="btn sm ghost" data-keep="${f.id}" title="Keep this copy, delete the others">${I.check} Keep this</button>
+        <button class="icon-btn" data-del="${f.id}" title="Delete only this copy">${I.trash}</button></div>`).join('')}</div></div>`; }).join('')
       : `<div class="empty">${I.dupe}<h3>No duplicates</h3><p>Every file in your library is unique.</p></div>`}</div>`;
+  const done = n => { toast(`${n} duplicate${n === 1 ? '' : 's'} removed – moved to the trash`, 'ok'); PAGES.duplicates(); refreshMeta(); };
+  const note = 'Tags, collections, print history, queue entries, rating and status of the deleted copies are moved to the kept file. Deleted files go to the trash and can be restored until you empty it.';
   $('#view').onclick = async e => {
     const d = e.target.closest('[data-del]');
-    if (d) { if (await confirmDlg('Delete this copy (moves it to trash)?', { ok: 'Delete', danger: true })) { await api('/files/' + d.dataset.del, { method: 'DELETE' }); PAGES.duplicates(); refreshMeta(); } return; }
+    if (d) {
+      const g = groups.find(x => x.files.some(f => f.id == d.dataset.del));
+      const keep = g.files.find(f => f.id != d.dataset.del);
+      if (await confirmDlg(`Delete this copy?<br><span class="muted small">Its tags, collections and print history go to <b>${esc(path(keep))}</b>. ${note.split('. ').pop()}</span>`, { ok: 'Delete', danger: true })) {
+        const r = await api('/duplicates/resolve', { method: 'POST', body: { keep: keep.id, delete: [+d.dataset.del] } }); done(r.removed);
+      }
+      return;
+    }
     const k = e.target.closest('[data-keep]');
     if (k) {
       const g = groups.find(x => x.sha256 === k.closest('[data-sha]').dataset.sha);
-      const others = g.files.slice(1).map(f => f.id);
-      if (await confirmDlg(`Delete ${others.length} copies and keep <b>${esc(g.files[0].name)}</b>? Tags from the deleted copies are merged into the kept file.`, { ok: 'Delete copies', danger: true })) {
-        const allTags = [...new Set(g.files.flatMap(f => f.tags.map(t => t.name)))];
-        if (allTags.length) await api('/files/batch', { method: 'POST', body: { ids: [g.files[0].id], action: 'add_tags', value: allTags } });
-        await api('/files/batch', { method: 'POST', body: { ids: others, action: 'delete' } });
-        toast('Duplicates removed', 'ok'); PAGES.duplicates(); refreshMeta();
+      const keep = g.files.find(f => f.id == k.dataset.keep), others = g.files.filter(f => f !== keep);
+      if (await confirmDlg(`Keep <b>${esc(path(keep))}</b> and delete ${others.length} other cop${others.length === 1 ? 'y' : 'ies'}:<br>${others.map(f => `<span class="mono small">${esc(path(f))}</span>`).join('<br>')}<br><br><span class="muted small">${note}</span>`, { ok: `Delete ${others.length}`, danger: true })) {
+        const r = await api('/duplicates/resolve', { method: 'POST', body: { keep: keep.id, delete: others.map(f => f.id) } }); done(r.removed);
+      }
+      return;
+    }
+    const all = e.target.closest('[data-all]');
+    if (all) {
+      const pick = all.dataset.all === 'oldest' ? oldest : newest;
+      const plan = groups.map(g => { const kf = pick(g); return { keep: kf.id, delete: g.files.filter(f => f !== kf).map(f => f.id) }; });
+      const n = plan.reduce((a, p) => a + p.delete.length, 0);
+      if (await confirmDlg(`Keep the <b>${all.dataset.all}</b> copy in all ${groups.length} groups and delete <b>${n}</b> files (${fmt.bytes(wasted)})?<br><br><span class="muted small">${note}</span>`, { ok: `Delete ${n}`, danger: true })) {
+        const r = await api('/duplicates/resolve', { method: 'POST', body: { groups: plan } }); done(r.removed);
       }
     }
   };

@@ -335,8 +335,8 @@ label.fld > span { text-transform: uppercase; letter-spacing: .6px; font-size: 1
 
 .dupe-group { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px; margin-bottom: 12px; }
 .dupe-group .hd { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; font-size: 13px; }
-.dupe-files { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr)); gap: 8px; }
-.dupe-file { display: grid; grid-template-columns: 56px 1fr auto; gap: 10px; align-items: center; padding: 8px; border-radius: 8px; background: var(--panel2); }
+.dupe-files { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(380px, 100%), 1fr)); gap: 8px; }
+.dupe-file { display: grid; grid-template-columns: 56px 1fr auto auto; gap: 8px; align-items: center; padding: 8px; border-radius: 8px; background: var(--panel2); }
 .dupe-file img { width: 56px; height: 56px; object-fit: contain; background: var(--bed); border-radius: 6px; }
 .dupe-file .p { font: 11.5px var(--mono); color: var(--muted); word-break: break-all; }
 
@@ -751,3 +751,4 @@ tr.peek td { background: var(--accent-soft); }
 [data-theme="dark"]:not([data-bg="plain"]) .table tbody tr:last-child td:first-child { border-bottom-left-radius: 12px; }
 [data-theme="dark"]:not([data-bg="plain"]) .table tbody tr:last-child td:last-child { border-bottom-right-radius: 12px; }
 .lib-show.printing .cap::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--red); margin-right: 6px; vertical-align: 1px; animation: livepulse 1.4s ease-in-out infinite; }
+.btn.primary.danger { background: var(--red); border-color: var(--red); color: #fff; }
