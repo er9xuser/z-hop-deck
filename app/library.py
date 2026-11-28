@@ -712,9 +712,9 @@ def start_background():
     if db.setting("f3d_thumbs") != "1":  # 1.25.8: Fusion 360 preview picture
         db.ex("UPDATE files SET analyzed=0 WHERE missing=0 AND ext IN ('f3d','f3z') AND thumb IN (0,1,4)")
         db.set_setting("f3d_thumbs", "1")
-    if db.setting("blend_thumbs") != "2":  # 1.25.11 Blender preview, 1.25.12 cropped to the model
-        db.ex("UPDATE files SET analyzed=0 WHERE missing=0 AND ext='blend' AND thumb IN (0,1,4)")
-        db.set_setting("blend_thumbs", "2")
+    if db.setting("blend_thumbs") != "3":  # 1.25.11 Blender preview, 1.25.13 cropped to the model (also kind 2)
+        db.ex("UPDATE files SET analyzed=0 WHERE missing=0 AND ext='blend' AND thumb IN (0,1,2,4)")
+        db.set_setting("blend_thumbs", "3")
     if db.setting("gcode_thumbs") != "1":  # 1.25.7: toolpath pictures for G-code without an embedded one, QOI, .bgcode
         db.ex("UPDATE files SET analyzed=0 WHERE missing=0 AND kind='gcode' AND thumb IN (0,1)")
         db.set_setting("gcode_thumbs", "1")

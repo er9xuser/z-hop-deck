@@ -33,7 +33,7 @@ logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("zhopdeck")
 
-VERSION = "1.25.12"  # bump on every release - shown in the UI
+VERSION = "1.25.13"  # bump on every release - shown in the UI
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "4096"))
 STATUSES = ["none", "want", "queued", "printing", "printed", "failed"]
@@ -338,7 +338,12 @@ def serialize(f, tags=None, settings=None, full=False):
     d["material"] = meta.get("material")
     d["layer_height"] = meta.get("layer_height")
     d["tags"] = tags or []
-    d["thumb_v"] = int(f["mtime"] or 0) + (f["thumb"] or 0) * 7 + (f["analyzed"] or 0)
+    # cache-buster for the 30-day cached thumbnail: must change whenever the picture is redone
+    try:
+        tv = int(os.stat(lib.thumb_path(f["id"])).st_mtime)
+    except OSError:
+        tv = 0
+    d["thumb_v"] = int(f["mtime"] or 0) + (f["thumb"] or 0) * 7 + (f["analyzed"] or 0) + tv
     if full:
         d["meta"] = meta
         d["notes"] = f["notes"]
