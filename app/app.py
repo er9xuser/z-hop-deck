@@ -34,7 +34,7 @@ logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("zhopdeck")
 
-VERSION = "1.26.6"  # bump on every release - shown in the UI
+VERSION = "1.26.7"  # bump on every release - shown in the UI
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "4096"))
 STATUSES = ["none", "want", "queued", "printing", "printed", "failed"]
@@ -1503,9 +1503,13 @@ def printing_now():
         if st.get("file_size"):  # several files with that name: prefer the one with the same size
             same = [r for r in rows if r["size"] == st["file_size"]]
             rows = same or rows
+        item = None
+        if rows and request.args.get("items") == "1":  # Home shows the model being printed
+            f = db.q1("SELECT * FROM files WHERE id=?", (rows[0]["id"],))
+            item = serialize(f, [], db.settings()) if f else None
         out.append({"printer_id": p["id"], "printer": p["name"], "state": st["state"], "file": st["file"],
                     "progress": st.get("progress") or 0, "remaining_s": st.get("remaining_s"),
-                    "file_id": rows[0]["id"] if rows else None})
+                    "file_id": rows[0]["id"] if rows else None, "item": item})
     return jsonify(out)
 
 

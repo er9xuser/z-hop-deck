@@ -750,3 +750,4 @@ tr.peek td { background: var(--accent-soft); }
 [data-theme="dark"]:not([data-bg="plain"]) .table tbody td { background: color-mix(in srgb, var(--panel) 90%, transparent); }
 [data-theme="dark"]:not([data-bg="plain"]) .table tbody tr:last-child td:first-child { border-bottom-left-radius: 12px; }
 [data-theme="dark"]:not([data-bg="plain"]) .table tbody tr:last-child td:last-child { border-bottom-right-radius: 12px; }
+.lib-show.printing .cap::before { content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--red); margin-right: 6px; vertical-align: 1px; animation: livepulse 1.4s ease-in-out infinite; }

@@ -1837,9 +1837,12 @@ const OK_EXT = /\.(stl|3mf|obj|step|stp|iges|igs|f3d|scad|blend|fcstd|skp|dxf|dw
 function openUpload(initial = []) {
   let files = [];
   // inside an open model folder a new upload goes NEXT to that model, not into it (it would become one of its parts)
-  const openModel = insideBundle() ? bundleAt(S.f.root, S.f.folder) : null;
+  // folder and collection are only taken over from what is open in the Library - not from an old visit (Home)
+  const inLib = S.route === 'library';
+  const openModel = inLib && insideBundle() ? bundleAt(S.f.root, S.f.folder) : null;
   const curFolder = openModel ? openModel.root + '|' + openModel.path.split('/').slice(0, -1).join('/')
-    : S.f.root && S.f.folder != null ? S.f.root + '|' + S.f.folder : (S.folders[0]?.root || '') + '|';
+    : inLib && S.f.root && S.f.folder != null ? S.f.root + '|' + S.f.folder : (S.folders[0]?.root || '') + '|';
+  const curColl = inLib ? S.f.collection : '';
   const m = modal({ title: 'Upload to library', size: 'lg', body: `
     <div class="dropzone" id="dz">${I.upload}<b>Drop files or folders here</b><span>or <a href="#" id="pick-files">choose files</a> · <a href="#" id="pick-dir">choose a folder</a></span>
       <span class="small" style="display:block;margin-top:6px;opacity:.75">Tip: drag a folder from Explorer – "choose a folder" makes the browser ask for confirmation.</span>
@@ -1851,7 +1854,7 @@ function openUpload(initial = []) {
     <div class="box small hidden" id="u-model-hint" style="padding:8px 12px;border-color:var(--yellow);color:var(--text2)"></div>
     ${openModel ? `<label class="check small" style="margin-top:-4px"><input type="checkbox" id="u-into"> Add the files to the open model <b>${esc(openModel.name)}</b> as new parts</label>` : ''}
     <div class="grid2"><label class="fld"><span>Tags for uploaded files</span><div id="u-tags"></div></label>
-      <label class="fld"><span>Add to collection</span><select id="u-coll"><option value="">—</option>${S.collections.map(c => `<option value="${c.id}" ${S.f.collection == c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label></div>
+      <label class="fld"><span>Add to collection</span><select id="u-coll"><option value="">—</option>${S.collections.map(c => `<option value="${c.id}" ${curColl && curColl == c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label></div>
     <div class="row wrap" style="gap:18px"><label class="check"><input type="checkbox" id="u-bundle" ${store.get('bundleFolders', true) ? 'checked' : ''}> Each uploaded folder / ZIP is one model</label>
     <label class="check"><input type="checkbox" id="u-zip" ${store.get('extractZips', true) ? 'checked' : ''}> Extract ZIP archives automatically</label></div>
     <div class="box hidden small" id="u-err" style="border-color:var(--red);color:var(--red);display:flex;flex-direction:column;gap:4px"></div>
@@ -2716,8 +2719,8 @@ PAGES.home = async (_arg, quiet) => {
   if (S.route !== 'home') return;
   const qn = d.queue_copies;
   const thumbOf = it => it.type === 'bundle' ? `<img src="/api/bundles/${it.id}/thumb?v=${it.thumb_v}" alt="" loading="lazy">` : thumbHtml(it);
-  const lp = d.last_print;
-  const hero = lp?.file || d.new[0];
+  const hero = d.new[0];
+  S._homeNewest = hero;
   const ring = sp => { const pc = Math.max(0, Math.min(100, Math.round(100 * sp.remaining / (sp.weight_total || 1000)))); return `<span class="ring" style="--p:${pc}%"><i style="background:${esc(sp.color || '#888')}"></i></span>`; };
   const maxW = Math.max(1, ...d.weeks);
   $('#view').innerHTML = `<div class="page home">
@@ -2732,7 +2735,7 @@ PAGES.home = async (_arg, quiet) => {
             <a class="kpi" href="#/queue"><span class="ki k3">${I.queue}</span><b>${fmt.num(qn)}</b><span>In queue</span></a>
             <a class="kpi" href="#/printers"><span class="ki k4">${I.printer}</span><b>${d.printers.length}</b><span>Printers</span></a>
           </div>
-          ${hero ? `<a class="lib-show" href="${itemHash(hero)}" ${hero.type === 'bundle' ? `data-hb="${hero.id}"` : ''}><div class="th">${thumbOf(hero)}</div><span class="cap">${lp?.file ? 'Last printed' : 'Newest'}: <b>${esc(lp?.file ? hero.display_name : (hero.display_name || hero.name))}</b></span></a>` : ''}
+          ${hero ? heroHtml(hero, 'Newest') : ''}
         </div>
       </section>
       <div class="hstatus">
@@ -2790,6 +2793,27 @@ PAGES.home = async (_arg, quiet) => {
   homePrinters();
 };
 
+function homeThumbOf(it) { return it.type === 'bundle' ? `<img src="/api/bundles/${it.id}/thumb?v=${it.thumb_v}" alt="" loading="lazy">` : thumbHtml(it); }
+function heroHtml(it, label) {
+  return `<a class="lib-show" href="${itemHash(it)}" ${it.type === 'bundle' ? `data-hb="${it.id}"` : ''}><div class="th">${homeThumbOf(it)}</div><span class="cap">${label}: <b>${esc(it.display_name || it.name)}</b></span></a>`;
+}
+// "Your library" picture: the model being printed right now, otherwise the newest one
+async function homeHero() {
+  const card = $('.lib-card .lib-body'); if (!card) return;
+  let pr = null;
+  try { pr = (await api('/printing?items=1')).find(x => x.item); } catch { }
+  if (S.route !== 'home') return;
+  const cur = $('.lib-show', card);
+  const want = pr ? `p${pr.item.id}:${Math.round(pr.progress * 100)}` : `n${S._homeNewest?.id || ''}`;
+  if (cur && cur.dataset.key === want) return;
+  const it = pr ? pr.item : S._homeNewest;
+  if (!it) { cur?.remove(); return; }
+  const el = h(heroHtml(it, pr ? `${/paus/i.test(pr.state) ? 'Paused' : 'Now printing'} ${Math.round(pr.progress * 100)}%` : 'Newest'));
+  el.dataset.key = want;
+  if (pr) el.classList.add('printing');
+  cur ? cur.replaceWith(el) : card.append(el);
+}
+
 /* ---- Home → Printers: status every few seconds, live toolpath of the running print ---- */
 const LIVE = new Map();  // printer id -> { file, el, viewer, ready, failed }
 let homePoll = null;
@@ -2822,6 +2846,7 @@ async function homePrinters() {
     liveView(p, st, row, busy);
   }));
   for (const k of [...LIVE.keys()]) if (!list.some(p => p.id === k)) disposeLive(k);
+  if (printing || $('.lib-show.printing')) homeHero();  // also switches back to "Newest" when the print ends
   if (S.route === 'home' && !document.hidden) homePoll = setTimeout(homePrinters, printing ? 5000 : 30000);
 }
 function fmtLeft(s) { return s >= 3600 ? `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min` : `${Math.max(1, Math.round(s / 60))} min`; }

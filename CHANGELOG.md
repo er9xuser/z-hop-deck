@@ -2,6 +2,10 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.26.7
+- Home → Your library: the picture shows the model being printed right now (*Now printing 42 %*, red dot), otherwise the newest model; switches back by itself when the print ends
+- Fix: Upload from Home (or any page outside the Library) pre-selected the collection / folder that was open in the Library earlier, so new files landed in that collection. Only what is open in the Library right now is taken over
+
 ## 1.26.6
 - Tables (Print log, list view, …) on the carbon background: rows sit on a dark panel with rounded bottom corners, no more lone line floating under the last row
 
