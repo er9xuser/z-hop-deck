@@ -2,6 +2,9 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.26.4
+- Security (CodeQL): the live-view G-code endpoint no longer returns exception text; details are written to the container log
+
 ## 1.26.3
 - Live refresh also follows the print log, the queue and the *printed* status: when a finished print is logged automatically, Home (Printed, This month, Up next) and the Library cards update by themselves
 

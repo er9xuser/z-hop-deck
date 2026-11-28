@@ -34,7 +34,7 @@ logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("zhopdeck")
 
-VERSION = "1.26.3"  # bump on every release - shown in the UI
+VERSION = "1.26.4"  # bump on every release - shown in the UI
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "4096"))
 STATUSES = ["none", "want", "queued", "printing", "printed", "failed"]
@@ -1511,8 +1511,9 @@ def printer_job_gcode(pid):
         return err("no file", 400)
     try:
         size, mod = prn.job_file_info(p, name)
-    except prn.PrinterError as e:
-        return err(str(e), 502)
+    except prn.PrinterError as e:  # details go to the log only (no exception text in the response)
+        log.warning("live view: file info for %s on %s failed: %s", name, p["name"], e)
+        return err("the printer did not tell which file it is printing (see the container log)", 502)
     import hashlib
     key = hashlib.sha1(f"{pid}|{name}|{size}|{mod}".encode()).hexdigest()[:20]
     cdir = os.path.join(db.DATA_DIR, "jobcache")
@@ -1524,7 +1525,8 @@ def printer_job_gcode(pid):
                 try:
                     prn.download_job_file(p, name, path)
                 except prn.PrinterError as e:
-                    return err(str(e), 502)
+                    log.warning("live view: download of %s from %s failed: %s", name, p["name"], e)
+                    return err("could not get the G-code from the printer (see the container log)", 502)
                 olds = sorted((os.path.join(cdir, x) for x in os.listdir(cdir) if x.endswith(".gcode")),
                               key=os.path.getmtime, reverse=True)
                 for o in olds[4:]:  # keep the last 4 jobs
