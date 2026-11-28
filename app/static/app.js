@@ -308,6 +308,7 @@ async function route() {
   closeDetail(true);
   const page = PAGES[name] ? name : 'home';
   if (page !== 'library') closePanel();
+  if (page !== 'home') { clearTimeout(homePoll); disposeLive(); }  // live viewers only live on Home
   if (page === S.route && page === 'library' && $('#cards-host')) return; // returning from detail - keep scroll
   S.route = page;
   renderNav();
@@ -2536,7 +2537,7 @@ async function liveRefresh(busy) {
     }
   } catch { } finally { liveBusy = false; }
 }
-document.addEventListener('visibilitychange', () => { if (!document.hidden) pollScan(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { pollScan(); if (S.route === 'home') homePrinters(); } });
 
 /* ============================================================ library: collections row, banners, tabs */
 const LIB_TABS = [['', 'All models', I.grid], ['printed', 'Printed', I.check], ['unprinted', 'Unprinted', I.cube], ['queue', 'Queue', I.queue], ['fav', 'Favorites', I.heart]];
@@ -2768,19 +2769,94 @@ PAGES.home = async (_arg, quiet) => {
     const t = e.target.closest('.kpi[data-tab]');
     if (t) { e.preventDefault(); goLibraryHome(); S.f.tab = t.dataset.tab; if (S.route === 'library' && $('#filterbar')) applyFilters(); }
   };
-  for (const p of d.printers.filter(x => x.conn_type)) {
-    api(`/printers/${p.id}/status`).then(st => {
-      const row = $(`[data-hp="${p.id}"]`, v); if (!row) return;
-      const sp = st.active_spool;
-      $('.st', row).textContent = st.connected ? `${st.state}${st.progress != null && st.state === 'printing' ? ' · ' + Math.round(st.progress * 100) + '%' : ''}${sp ? ' · ' + sp.name : ''}` : (st.state || 'offline');
-      const dot = $('.dot', row);
-      const printing = st.connected && /print/i.test(st.state || '');
-      dot.classList.add(!st.connected ? 'off' : printing ? 'busy' : 'on');
-      dot.title = !st.connected ? 'not reachable' : printing ? 'printing' : 'online';
-      if (sp) $('.st', row).insertAdjacentHTML('afterbegin', `<i class="spc" style="background:${esc(sp.color || '#888')}"></i>`);
-    }).catch(() => { });
-  }
+  S._homePrinters = d.printers;
+  homePrinters();
 };
+
+/* ---- Home → Printers: status every few seconds, live toolpath of the running print ---- */
+const LIVE = new Map();  // printer id -> { file, el, viewer, ready, failed }
+let homePoll = null;
+function disposeLive(pid) {
+  for (const [k, L] of LIVE) {
+    if (pid != null && k !== pid) continue;
+    try { L.viewer?.dispose(); } catch { }
+    L.el.remove(); LIVE.delete(k);
+  }
+}
+async function homePrinters() {
+  clearTimeout(homePoll);
+  const list = (S._homePrinters || []).filter(x => x.conn_type);
+  if (S.route !== 'home' || !list.length) return;
+  let printing = false;
+  await Promise.all(list.map(async p => {
+    let st;
+    try { st = await api(`/printers/${p.id}/status`); } catch { return; }
+    if (S.route !== 'home') return;
+    const row = $(`[data-hp="${p.id}"]`); if (!row) return;
+    const sp = st.active_spool;
+    const busy = st.connected && /print|paus/i.test(st.state || '');
+    printing = printing || busy;
+    $('.st', row).textContent = st.connected ? `${st.state}${st.progress != null && busy ? ' · ' + Math.round(st.progress * 100) + '%' : ''}${busy && st.remaining_s ? ' · ' + fmtLeft(st.remaining_s) + ' left' : ''}${sp ? ' · ' + sp.name : ''}` : (st.state || 'offline');
+    const dot = $('.dot', row);
+    dot.classList.remove('off', 'busy', 'on');
+    dot.classList.add(!st.connected ? 'off' : busy ? 'busy' : 'on');
+    dot.title = !st.connected ? 'not reachable' : busy ? 'printing' : 'online';
+    if (sp) $('.st', row).insertAdjacentHTML('afterbegin', `<i class="spc" style="background:${esc(sp.color || '#888')}"></i>`);
+    liveView(p, st, row, busy);
+  }));
+  for (const k of [...LIVE.keys()]) if (!list.some(p => p.id === k)) disposeLive(k);
+  if (S.route === 'home' && !document.hidden) homePoll = setTimeout(homePrinters, printing ? 5000 : 30000);
+}
+const fmtLeft = s => s >= 3600 ? `${Math.floor(s / 3600)} h ${Math.round((s % 3600) / 60)} min` : `${Math.max(1, Math.round(s / 60))} min`;
+function liveView(p, st, row, busy) {
+  let L = LIVE.get(p.id);
+  if (!busy || !st.file || st.live === false) { if (L) disposeLive(p.id); return; }
+  if (L && L.file !== st.file) { disposeLive(p.id); L = null; }
+  if (!L) {
+    L = { file: st.file, el: h(`<div class="hlive" title="Drag to turn, scroll to zoom"><div class="lvmsg muted small"></div><div class="lvinfo mono small"></div></div>`) };
+    LIVE.set(p.id, L);
+    const big = (st.file_size || 0) > 60 * 1024 * 1024;
+    if (big) {
+      $('.lvmsg', L.el).innerHTML = `<button class="btn sm">${I.cube} Show live toolpath (${fmt.bytes(st.file_size)})</button>`;
+      $('.lvmsg button', L.el).onclick = () => startLive(p, L);
+    } else startLive(p, L);
+  }
+  if (row.nextElementSibling !== L.el) row.after(L.el);  // (re)attach after a Home refresh
+  L.last = st;
+  if (L.ready) livePos(L, st);
+}
+async function startLive(p, L) {
+  const msg = $('.lvmsg', L.el);
+  msg.textContent = 'Loading toolpath…';
+  try {
+    const V = await loadViewer();
+    if (!LIVE.has(p.id) || LIVE.get(p.id) !== L) return;
+    L.viewer = new V.Viewer(L.el, { bed: viewerBed(), dark: document.documentElement.dataset.theme === 'dark' });
+    L.el.prepend(L.viewer.renderer.domElement);
+    await L.viewer.loadGcode(`/api/printers/${p.id}/job.gcode?file=${encodeURIComponent(L.file)}`, pr => { msg.textContent = `Loading toolpath… ${Math.round(pr * 100)}%`; });
+    if (LIVE.get(p.id) !== L) return;
+    L.viewer.showGhost();
+    L.viewer.setBedVisible(false);
+    L.viewer.frame();
+    L.viewer.setAutoRotate(true);
+    msg.textContent = '';
+    L.ready = true;
+    if (L.last) livePos(L, L.last);
+  } catch (e) {
+    try { L.viewer?.dispose(); } catch { }
+    L.viewer = null; L.failed = true;
+    msg.textContent = 'Live view not available: ' + e.message;
+  }
+}
+function livePos(L, st) {
+  const v = L.viewer; if (!v?.gcode) return;
+  let r;
+  if (st.file_pos != null) r = v.setFilePos(st.file_pos);          // exact: where the printer is in the file
+  else if (st.layer) r = v.setProgressLayer(st.layer);              // slicer reports layers (SET_PRINT_STATS_INFO)
+  else if (st.z != null) r = v.setZ(st.z);
+  else r = v.setFilePos((st.progress || 0) * v.gcode.length);
+  if (r) $('.lvinfo', L.el).textContent = `Layer ${r.layer} / ${r.layers} · Z ${(+r.z || 0).toFixed(2)} mm`;
+}
 
 /* ============================================================ keyboard */
 document.addEventListener('keydown', e => {

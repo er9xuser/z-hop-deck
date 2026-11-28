@@ -140,6 +140,8 @@ Use **Test connection** before saving. If the printer's web page is behind a log
 
 Connected printers show state, progress, time left, temperatures and (Moonraker with `[spoolman]`) the loaded spool. **Send to printer** uploads G-code and can start the print. Bambu Lab printers use a different protocol: open the model in OrcaSlicer or Bambu Studio and print from there.
 
+**Live view on Home:** while a Klipper (Moonraker) or OctoPrint printer is printing, the Printers card shows the toolpath of the running job – what is printed so far in the slicer's colours, the rest as a faint ghost – and grows as the print goes on (layer and Z shown underneath; drag to turn it). Z-Hop Deck fetches the G-code from the printer once per job (kept in `data/jobcache`, last 4 jobs); after that every update is a tiny status request every 5 s and all drawing happens in your browser. Files over 60 MB show a button instead of loading automatically.
+
 ## Print queue and print log
 
 **Print queue:** add from the panel, the right-click menu or a model folder (*Queue all*). Drag to reorder, set copies, spool and printer per job; totals for time, filament and cost. *Printed ✓* logs the print and removes the job.

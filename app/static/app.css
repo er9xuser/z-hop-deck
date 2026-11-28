@@ -731,3 +731,12 @@ tr.peek td { background: var(--accent-soft); }
 .lp-docs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .lp-docs .btn { max-width: 100%; overflow: hidden; text-overflow: ellipsis; justify-content: flex-start; }
 .lp-docs .badge { text-transform: uppercase; font-size: 9.5px; padding: 1px 5px; }
+
+/* Home → live toolpath of the running print */
+.hlive { position: relative; height: 210px; margin: 2px 0 12px; border-radius: 12px; overflow: hidden;
+  background: radial-gradient(ellipse at 50% 60%, rgba(242,157,56,.07), rgba(0,0,0,.22) 70%); border: 1px solid var(--line, rgba(255,255,255,.06)); }
+.hlive canvas { position: absolute; inset: 0; width: 100% !important; height: 100% !important; display: block; }
+.hlive .lvmsg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 12px; pointer-events: none; }
+.hlive .lvmsg:empty { display: none; }
+.hlive .lvmsg button { pointer-events: auto; }
+.hlive .lvinfo { position: absolute; left: 10px; bottom: 8px; color: var(--muted, #9aa3b2); pointer-events: none; text-shadow: 0 1px 2px #000; }

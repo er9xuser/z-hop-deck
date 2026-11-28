@@ -107,16 +107,22 @@ def status(p):
     """Normalised status: state, file, progress (0-1), remaining_s, nozzle, bed (temps: [actual, target])."""
     t = p.get("conn_type")
     if t == "moonraker":
-        r = _req(p, "GET", "/printer/objects/query?print_stats&display_status&extruder&heater_bed&virtual_sdcard")
+        r = _req(p, "GET", "/printer/objects/query?print_stats&display_status&extruder&heater_bed&virtual_sdcard"
+                           "&gcode_move")
         s = r.get("result", {}).get("status", {})
         ps, ds = s.get("print_stats", {}), s.get("display_status", {})
+        vsd, gm, info = s.get("virtual_sdcard", {}), s.get("gcode_move", {}), (ps.get("info") or {})
         prog = ds.get("progress") or s.get("virtual_sdcard", {}).get("progress") or 0
         dur = ps.get("print_duration") or 0
         remaining = int(dur / prog - dur) if prog > 0.01 and dur else None
         ex, bed = s.get("extruder", {}), s.get("heater_bed", {})
         out = {"state": ps.get("state", "unknown"), "file": ps.get("filename") or None, "progress": prog,
                "remaining_s": remaining, "nozzle": [ex.get("temperature"), ex.get("target")],
-               "bed": [bed.get("temperature"), bed.get("target")], "message": ps.get("message") or ds.get("message")}
+               "bed": [bed.get("temperature"), bed.get("target")], "message": ps.get("message") or ds.get("message"),
+               # for the live toolpath view: where in the file / which layer the printer is
+               "file_pos": vsd.get("file_position"), "file_size": vsd.get("file_size"),
+               "layer": info.get("current_layer"), "layers": info.get("total_layer"),
+               "z": (gm.get("gcode_position") or [None] * 3)[2]}
         try:  # Moonraker's [spoolman] section: which spool is loaded right now
             sid = _req(p, "GET", "/server/spoolman/spool_id", timeout=3).get("result", {}).get("spool_id")
             if sid:
@@ -133,6 +139,8 @@ def status(p):
         return {"state": (job.get("state") or "unknown").lower() if not pr.get("_409") else "disconnected",
                 "file": ((job.get("job") or {}).get("file") or {}).get("name"),
                 "progress": (prog or 0) / 100, "remaining_s": (job.get("progress") or {}).get("printTimeLeft"),
+                "file_pos": (job.get("progress") or {}).get("filepos"),
+                "file_size": ((job.get("job") or {}).get("file") or {}).get("size"),
                 "nozzle": [t0.get("actual"), t0.get("target")], "bed": [bed.get("actual"), bed.get("target")]}
     if t == "prusalink":
         r = _req(p, "GET", "/api/v1/status")
@@ -141,6 +149,51 @@ def status(p):
                 "progress": (job.get("progress") or 0) / 100, "remaining_s": job.get("time_remaining"),
                 "nozzle": [pr.get("temp_nozzle"), pr.get("target_nozzle")], "bed": [pr.get("temp_bed"), pr.get("target_bed")]}
     raise PrinterError("printer has no connection configured")
+
+
+# --------------------------------------------------------------------------- the file being printed
+def job_file_info(p, filename):
+    """(size, modified) of a file on the printer - used as cache key for the live view."""
+    t = p.get("conn_type")
+    if t == "moonraker":
+        r = _req(p, "GET", "/server/files/metadata?filename=" + urllib.parse.quote(filename)).get("result", {})
+        return r.get("size"), r.get("modified")
+    if t == "octoprint":
+        r = _req(p, "GET", "/api/files/local/" + urllib.parse.quote(filename))
+        return r.get("size"), r.get("date")
+    raise PrinterError("live view needs a Klipper (Moonraker) or OctoPrint printer")
+
+
+def download_job_file(p, filename, dest, max_bytes=300 * 1024 * 1024):
+    """Copy the G-code the printer is printing to dest (streamed)."""
+    t = p.get("conn_type")
+    if t == "moonraker":
+        path = "/server/files/gcodes/" + urllib.parse.quote(filename)
+    elif t == "octoprint":
+        path = "/downloads/files/local/" + urllib.parse.quote(filename)
+    else:
+        raise PrinterError("live view needs a Klipper (Moonraker) or OctoPrint printer")
+    req = urllib.request.Request(_base(p) + path, headers=_headers(p, {"Accept": "*/*"}))
+    tmp = dest + ".part"
+    try:
+        with urllib.request.urlopen(req, timeout=30, context=_ctx()) as r, open(tmp, "wb") as out:
+            got = 0
+            while True:
+                chunk = r.read(1 << 20)
+                if not chunk:
+                    break
+                got += len(chunk)
+                if got > max_bytes:
+                    raise PrinterError("G-code too large for the live view")
+                out.write(chunk)
+        os.replace(tmp, dest)
+    except urllib.error.HTTPError as e:
+        raise PrinterError(f"printer refused the file download (HTTP {e.code})")
+    except urllib.error.URLError as e:
+        raise PrinterError(f"cannot reach printer: {e.reason}")
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
 
 
 # --------------------------------------------------------------------------- upload

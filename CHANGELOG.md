@@ -2,6 +2,10 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.26.0
+- **Live print view on Home**: while a Klipper (Moonraker) or OctoPrint printer prints, the Printers card shows the running job's toolpath – printed part in the slicer's feature colours, the rest as a ghost – growing with the print (exact file position, else the layer info / Z). Layer and Z underneath, drag to turn. The G-code is fetched from the printer once per job and cached (`data/jobcache`, last 4); updates are a small status request every 5 s, the drawing is done in the browser. Polling stops on other pages and when the tab is hidden
+- Home → Printers: status refreshes by itself (5 s while printing, 30 s otherwise) and shows the time left
+
 ## 1.25.14
 - Zip downloads are named after their content instead of `zhopdeck-<date>.zip`: one file → `name.zip`, a model / folder → `Folder name.zip` (paths inside start at that folder); a mixed selection → `6 files <date>.zip`
 

@@ -239,10 +239,49 @@ export class Viewer {
     this.object = new THREE.Group();
     this.object.add(lines);
     this.scene.add(this.object);
-    this.gcode = { geo, layerEnds: parsed.layerEnds, layerZ: parsed.layerZ };
+    this.gcode = { geo, lines, layerEnds: parsed.layerEnds, layerZ: parsed.layerZ, segPos: parsed.segPos, length: parsed.length, count: parsed.count };
     this.fitBed();
     this.frame();
     return { layers: parsed.layerEnds.length, segments: parsed.count, features: parsed.features, x: bb.max.x - bb.min.x, y: bb.max.y - bb.min.y, z: bb.max.z };
+  }
+
+  // live view: what is printed so far bright, the rest as a faint ghost
+  showGhost(opacity = 0.13) {
+    if (!this.gcode || this.gcode.ghost) return;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', this.gcode.geo.getAttribute('position'));
+    const ghost = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0x8a94a6, transparent: true, opacity, depthWrite: false }));
+    ghost.position.copy(this.gcode.lines.position);
+    this.object.add(ghost);
+    this.gcode.ghost = ghost;
+  }
+  // printer position -> draw everything up to it. Returns {layer, layers, z}
+  setFilePos(p) {
+    if (!this.gcode) return null;
+    const sp = this.gcode.segPos;
+    let lo = 0, hi = sp.length - 1, idx = -1;
+    while (lo <= hi) { const m = (lo + hi) >> 1; if (sp[m] < p) { idx = m; lo = m + 1; } else hi = m - 1; }
+    return this._drawTo(idx + 1);
+  }
+  setProgressLayer(layer) {  // 1-based layer number, whole layer
+    if (!this.gcode) return null;
+    const ends = this.gcode.layerEnds;
+    return this._drawTo(ends[Math.max(0, Math.min(ends.length - 1, layer - 1))]);
+  }
+  setZ(z) {
+    if (!this.gcode) return null;
+    const lz = this.gcode.layerZ;
+    let i = 0;
+    while (i + 1 < lz.length && lz[i + 1] <= z + 1e-3) i++;
+    return this._drawTo(this.gcode.layerEnds[i]);
+  }
+  _drawTo(nseg) {
+    this.gcode.geo.setDrawRange(0, nseg * 2);
+    const ends = this.gcode.layerEnds;
+    let l = 0;
+    while (l < ends.length && ends[l] < nseg) l++;
+    const li = Math.min(l, ends.length - 1);
+    return { layer: li + 1, layers: ends.length, z: this.gcode.layerZ[li] };
   }
 
   setLayer(n) {
@@ -290,6 +329,7 @@ function hexToRgb(h) {
 export function parseGcode(text) {
   let x = 0, y = 0, z = 0, e = 0, absXYZ = true, absE = true;
   let cap = 1 << 18, pos = new Float32Array(cap * 6), col = new Float32Array(cap * 6), n = 0;
+  let spos = new Float64Array(cap);  // where in the file each move ends (characters ~ bytes for G-code)
   const layerEnds = [], layerZ = [];
   let layerZcur = null;
   let feature = null, fcol = null, hasTypes = false;
@@ -298,6 +338,7 @@ export function parseGcode(text) {
     cap *= 2;
     const p2 = new Float32Array(cap * 6); p2.set(pos); pos = p2;
     const c2 = new Float32Array(cap * 6); c2.set(col); col = c2;
+    const s2 = new Float64Array(cap); s2.set(spos); spos = s2;
   };
   const re = /([XYZE])\s*(-?\d*\.?\d+)/gi;
   let start = 0;
@@ -344,6 +385,7 @@ export function parseGcode(text) {
       if (n >= cap) grow();
       const o = n * 6;
       pos[o] = x; pos[o + 1] = y; pos[o + 2] = nz; pos[o + 3] = nx; pos[o + 4] = ny; pos[o + 5] = nz;
+      spos[n] = start;
       const k = (layerZ.length % 2) ? 1 : 0.8;  // every other layer slightly darker -> visible layer lines
       if (fcol) { col[o] = col[o + 3] = fcol[0] * k; col[o + 1] = col[o + 4] = fcol[1] * k; col[o + 2] = col[o + 5] = fcol[2] * k; }
       else { col[o] = -1; }
@@ -363,5 +405,5 @@ export function parseGcode(text) {
       col[o] = col[o + 3] = r; col[o + 1] = col[o + 4] = g; col[o + 2] = col[o + 5] = bl;
     }
   }
-  return { positions: pos.subarray(0, n * 6), colors: col.subarray(0, n * 6), count: n, layerEnds, layerZ, features: [...features] };
+  return { positions: pos.subarray(0, n * 6), colors: col.subarray(0, n * 6), count: n, layerEnds, layerZ, features: [...features], segPos: spos.subarray(0, n), length: len };
 }

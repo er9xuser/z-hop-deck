@@ -33,7 +33,7 @@ logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("zhopdeck")
 
-VERSION = "1.25.14"  # bump on every release - shown in the UI
+VERSION = "1.26.0"  # bump on every release - shown in the UI
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "4096"))
 STATUSES = ["none", "want", "queued", "printing", "printed", "failed"]
@@ -1459,6 +1459,44 @@ def printer_status(pid):
         if sp:
             st["active_spool"] = sp
     return jsonify(st)
+
+
+@app.get("/api/printers/<int:pid>/job.gcode")
+def printer_job_gcode(pid):
+    """The G-code the printer is printing right now, for the live toolpath view on Home. Fetched from the printer
+    once per job and kept in data/jobcache (only the last few), so positions match the printer's file exactly."""
+    p = get_printer(pid)
+    name = (request.args.get("file") or "").strip()
+    if not name or "\0" in name or name.startswith("/") or ".." in name.split("/"):
+        return err("no file", 400)
+    try:
+        size, mod = prn.job_file_info(p, name)
+    except prn.PrinterError as e:
+        return err(str(e), 502)
+    import hashlib
+    key = hashlib.sha1(f"{pid}|{name}|{size}|{mod}".encode()).hexdigest()[:20]
+    cdir = os.path.join(db.DATA_DIR, "jobcache")
+    os.makedirs(cdir, exist_ok=True)
+    path = os.path.join(cdir, key + ".gcode")
+    if not os.path.exists(path):
+        with _job_lock:
+            if not os.path.exists(path):
+                try:
+                    prn.download_job_file(p, name, path)
+                except prn.PrinterError as e:
+                    return err(str(e), 502)
+                olds = sorted((os.path.join(cdir, x) for x in os.listdir(cdir) if x.endswith(".gcode")),
+                              key=os.path.getmtime, reverse=True)
+                for o in olds[4:]:  # keep the last 4 jobs
+                    try:
+                        os.remove(o)
+                    except OSError:
+                        pass
+    resp = send_file(path, mimetype="text/plain", max_age=86400, etag=key)
+    return resp
+
+
+_job_lock = threading.Lock()
 
 
 # --------------------------------------------------------------------------- OrcaSlicer / PrusaSlicer upload
