@@ -3,6 +3,8 @@ import base64
 import io
 import json
 import re
+import struct
+import zlib
 import zipfile
 import xml.etree.ElementTree as ET
 
@@ -53,13 +55,106 @@ def _decode_thumb(fmt, b64):
     except Exception:
         return None
     if fmt == "qoi":
-        return None
+        return decode_qoi(raw)
     try:
         im = Image.open(io.BytesIO(raw))
         im.load()
         return im
     except Exception:
         return None
+
+
+def decode_qoi(raw):
+    """Tiny QOI decoder (OrcaSlicer / PrusaSlicer can embed QOI thumbnails)."""
+    try:
+        if raw[:4] != b"qoif":
+            return None
+        w, h = struct.unpack(">II", raw[4:12])
+        if not (0 < w <= 2048 and 0 < h <= 2048):
+            return None
+        out = bytearray(w * h * 4)
+        idx = [(0, 0, 0, 0)] * 64
+        r = g = b = 0
+        a = 255
+        p, o, end, run = 14, 0, len(raw) - 8, 0
+        while o < len(out):
+            if run:
+                run -= 1
+            elif p < end:
+                b1 = raw[p]; p += 1
+                if b1 == 0xFE:
+                    r, g, b = raw[p], raw[p + 1], raw[p + 2]; p += 3
+                elif b1 == 0xFF:
+                    r, g, b, a = raw[p], raw[p + 1], raw[p + 2], raw[p + 3]; p += 4
+                elif b1 >> 6 == 0:
+                    r, g, b, a = idx[b1]
+                elif b1 >> 6 == 1:
+                    r = (r + ((b1 >> 4) & 3) - 2) & 255
+                    g = (g + ((b1 >> 2) & 3) - 2) & 255
+                    b = (b + (b1 & 3) - 2) & 255
+                elif b1 >> 6 == 2:
+                    b2 = raw[p]; p += 1
+                    dg = (b1 & 63) - 32
+                    r = (r + dg - 8 + ((b2 >> 4) & 15)) & 255
+                    g = (g + dg) & 255
+                    b = (b + dg - 8 + (b2 & 15)) & 255
+                else:
+                    run = b1 & 63
+                idx[(r * 3 + g * 5 + b * 7 + a * 11) % 64] = (r, g, b, a)
+            out[o:o + 4] = bytes((r, g, b, a))
+            o += 4
+        return Image.frombytes("RGBA", (w, h), bytes(out))
+    except Exception:
+        return None
+
+
+def parse_bgcode(path):
+    """Prusa binary G-code: metadata blocks + embedded thumbnails (PNG / JPG / QOI)."""
+    meta, thumbs = {"format": "Prusa binary G-code"}, []
+    texts = []
+    try:
+        with open(path, "rb") as f:
+            if f.read(4) != b"GCDE":
+                return meta, None
+            _ver, cks = struct.unpack("<IH", f.read(6))
+            ck_len = 4 if cks == 1 else 0
+            for _ in range(2000):
+                hdr = f.read(8)
+                if len(hdr) < 8:
+                    break
+                btype, comp, usize = struct.unpack("<HHI", hdr)
+                csize = struct.unpack("<I", f.read(4))[0] if comp else usize
+                if btype == 1:  # G-code: metadata and thumbnails come before it - stop here
+                    break
+                params = f.read(6 if btype == 5 else 2)
+                data = f.read(csize)
+                f.read(ck_len)
+                if btype == 5 and len(params) == 6:
+                    fmt, w, h = struct.unpack("<HHH", params)
+                    im = decode_qoi(data) if fmt == 2 else None
+                    if fmt in (0, 1):
+                        try:
+                            im = Image.open(io.BytesIO(data)); im.load()
+                        except Exception:
+                            im = None
+                    if im is not None:
+                        thumbs.append((w * h, im))
+                elif btype in (0, 2, 3, 4):
+                    if comp == 1:
+                        try:
+                            data = zlib.decompress(data)
+                        except zlib.error:
+                            continue
+                    elif comp:
+                        continue  # heatshrink - not worth it for metadata
+                    texts.append("\n".join("; " + ln for ln in data.decode("utf-8", "ignore").splitlines()))
+    except (OSError, struct.error):
+        pass
+    if texts:
+        meta.update(gcode_meta_from_text("\n".join(texts)))
+        meta["format"] = "Prusa binary G-code"
+    thumbs.sort(key=lambda x: -x[0])
+    return meta, (thumbs[0][1] if thumbs else None)
 
 
 def extract_gcode_thumbnails(text):
@@ -177,7 +272,7 @@ def gcode_meta_from_text(text):
 def parse_gcode(path, ext="gcode"):
     """Returns (meta, best_thumbnail_or_None)."""
     if ext == "bgcode":
-        return {"format": "Prusa binary G-code"}, None
+        return parse_bgcode(path)
     with open(path, "rb") as f:
         f.seek(0, 2)
         size = f.tell()

@@ -621,3 +621,119 @@ def image_to_png_bytes(img):
     buf = io.BytesIO()
     img.save(buf, "PNG", optimize=True)
     return buf.getvalue()
+
+
+# --------------------------------------------------------------------------- G-code toolpath preview
+def _gcode_segments(path, max_bytes=400 * 1024 * 1024):
+    """Extruding moves of a G-code file as an (N, 6) float32 array x0 y0 z0 x1 y1 z1 (streamed, any size)."""
+    from array import array
+    seg = array("f")
+    x = y = z = e = 0.0
+    abs_xyz, abs_e = True, True
+    read = 0
+    with open(path, "r", encoding="utf-8", errors="ignore") as fh:
+        for line in fh:
+            read += len(line)
+            if read > max_bytes:
+                break
+            c0 = line[:1]
+            if c0 != "G" and c0 != "M":
+                continue
+            code = line.split(";", 1)[0].split()
+            if not code:
+                continue
+            cmd = code[0]
+            if cmd in ("G1", "G0", "G2", "G3", "G01", "G00"):
+                nx, ny, nz, de = x, y, z, None
+                for w in code[1:]:
+                    k = w[:1]
+                    try:
+                        val = float(w[1:])
+                    except ValueError:
+                        continue
+                    if k == "X":
+                        nx = val if abs_xyz else x + val
+                    elif k == "Y":
+                        ny = val if abs_xyz else y + val
+                    elif k == "Z":
+                        nz = val if abs_xyz else z + val
+                    elif k == "E":
+                        if abs_e:
+                            de, e = val - e, val
+                        else:
+                            de = val
+                if de is not None and de > 0 and (nx != x or ny != y):
+                    seg.extend((x, y, z, nx, ny, nz))
+                x, y, z = nx, ny, nz
+            elif cmd == "G90":
+                abs_xyz = abs_e = True
+            elif cmd == "G91":
+                abs_xyz = abs_e = False
+            elif cmd == "M82":
+                abs_e = True
+            elif cmd == "M83":
+                abs_e = False
+            elif cmd == "G92":
+                for w in code[1:]:
+                    if w[:1] == "E":
+                        try:
+                            e = float(w[1:])
+                        except ValueError:
+                            pass
+    s = np.frombuffer(seg, dtype=np.float32).reshape(-1, 6)
+    return s.copy()
+
+
+def render_gcode_thumbnail(path, size=512, color="#f29d38", ss=2, max_segs=900_000):
+    """Preview of a sliced file without an embedded picture: the extrusion moves drawn like the model."""
+    s = _gcode_segments(path)
+    if len(s) < 10:
+        raise MeshError("no extrusion moves in G-code")
+    if len(s) > max_segs:  # keep every n-th move - still reads as the part
+        s = s[:: int(np.ceil(len(s) / max_segs))]
+    p0, p1 = s[:, :3].astype(np.float64), s[:, 3:].astype(np.float64)
+    allp = np.concatenate([p0, p1])
+    # ignore purge lines / priming far away from the part: crop to the 1..99 % range of the points
+    lo, hi = np.percentile(allp, 0.5, axis=0), np.percentile(allp, 99.5, axis=0)
+    pad = (hi - lo) * 0.08 + 1
+    keep = ((p0 >= lo - pad) & (p0 <= hi + pad) & (p1 >= lo - pad) & (p1 <= hi + pad)).all(1)
+    p0, p1 = p0[keep], p1[keep]
+    if len(p0) < 10:
+        raise MeshError("no extrusion moves in G-code")
+    center = (np.minimum(p0.min(0), p1.min(0)) + np.maximum(p0.max(0), p1.max(0))) / 2
+    yaw, pitch = np.radians(-40), np.radians(-58)
+    rz = np.array([[np.cos(yaw), -np.sin(yaw), 0], [np.sin(yaw), np.cos(yaw), 0], [0, 0, 1]])
+    rx = np.array([[1, 0, 0], [0, np.cos(pitch), -np.sin(pitch)], [0, np.sin(pitch), np.cos(pitch)]])
+    rot = rx @ rz
+    a, b = (p0 - center) @ rot.T, (p1 - center) @ rot.T
+    S = size * ss
+    xy = np.concatenate([a[:, :2], b[:, :2]])
+    mn, mx = xy.min(0), xy.max(0)
+    span = max(mx[0] - mn[0], mx[1] - mn[1], 1e-6)
+    scale = (S * 0.86) / span
+    mid = (mn + mx) / 2
+
+    def scr(v):
+        return np.stack([(v[:, 0] - mid[0]) * scale + S / 2, S / 2 - (v[:, 1] - mid[1]) * scale], 1)
+    A, B = scr(a), scr(b)
+    # shading: the side of a perimeter facing the light is brighter; higher layers a touch lighter
+    d = p1[:, :2] - p0[:, :2]
+    ln = np.linalg.norm(d, axis=1) + 1e-9
+    nrm = np.stack([d[:, 1], -d[:, 0]], 1) / ln[:, None]
+    light = np.array([-0.55, 0.83])
+    zz = (p0[:, 2] - p0[:, 2].min()) / max(np.ptp(p0[:, 2]), 1e-6)
+    shade = 0.55 + 0.35 * np.abs(nrm @ light) + 0.2 * zz
+    base = np.maximum(_hex(color), 38)
+    cols = np.clip(base[None, :] * shade[:, None], 0, 255).astype(np.uint8)
+    width = max(1, int(round(0.45 * scale)))
+    order = np.argsort((a[:, 2] + b[:, 2]) / 2, kind="stable")  # far -> near
+    img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    dr = ImageDraw.Draw(img)
+    line = dr.line
+    for s0 in range(0, len(order), 50_000):
+        o = order[s0:s0 + 50_000]
+        for (x0, y0), (x1, y1), c in zip(A[o].tolist(), B[o].tolist(), cols[o].tolist()):
+            line((x0, y0, x1, y1), fill=(c[0], c[1], c[2], 255), width=width)
+    if ss > 1:
+        img = img.resize((size, size), Image.LANCZOS)
+    return img

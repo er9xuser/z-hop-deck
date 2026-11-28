@@ -570,7 +570,9 @@ def _analyze(fid, force_thumb=False):
                 thumb_img, thumb_kind = emb, 2
             elif ext != "bgcode":
                 try:
-                    thumb_img, thumb_kind = meshes.render_gcode_thumbnail(path, color=color), 1
+                    fc = str(meta.get("filament_color") or "")
+                    gc = fc if re.fullmatch(r"#[0-9a-fA-F]{6}", fc) else color  # paint it in the sliced filament
+                    thumb_img, thumb_kind = meshes.render_gcode_thumbnail(path, color=gc), 1
                 except Exception as e:
                     log.info("no toolpath preview for %s: %s", path, e)
         elif kind == "archive":
@@ -694,6 +696,9 @@ def request_rethumb_all():
 
 def start_background():
     _recover_from_crash()
+    if db.setting("gcode_thumbs") != "1":  # 1.25.7: toolpath pictures for G-code without an embedded one, QOI, .bgcode
+        db.ex("UPDATE files SET analyzed=0 WHERE missing=0 AND kind='gcode' AND thumb IN (0,1)")
+        db.set_setting("gcode_thumbs", "1")
     if db.setting("oom_recheck") != "2":  # 1.25.5 restart != OOM, 1.25.6 lean 3MF reader: retry those files once
         db.ex("UPDATE files SET analyzed=0, error=NULL WHERE error LIKE 'preview skipped: the server ran out of memory%'")
         for k in ("bundle_skip", "view_skip", "viewb_skip"):

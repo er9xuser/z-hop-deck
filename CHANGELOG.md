@@ -2,6 +2,12 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.25.7
+- G-code without an embedded picture now gets a thumbnail: the toolpath (extrusion moves) is drawn like the model, in the sliced filament colour; purge / prime lines are left out. Before, the 3D toolpath view worked but the card stayed empty
+- QOI thumbnails (OrcaSlicer / PrusaSlicer option) are decoded
+- Prusa binary G-code (.bgcode): embedded thumbnail and print time / material are read
+- Existing G-code files without a picture are re-analysed once automatically
+
 ## 1.25.6
 - Big 3MF files (e.g. 20 MB painted multi-colour projects) no longer get the server OOM-killed: the 3MF model XML is now streamed instead of loaded as a whole tree. A 18 MB / 1.6 M-triangle painted 3MF went from >1.4 GB (just to read it) to ~0.5 GB for the whole preview + 3D view
 - Files and 3D views that were skipped as "ran out of memory" are retried once automatically
