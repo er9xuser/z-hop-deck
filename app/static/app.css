@@ -744,3 +744,9 @@ tr.peek td { background: var(--accent-soft); }
 .pill-s.live { color: var(--red); border-color: color-mix(in srgb, var(--red) 60%, transparent); background: color-mix(in srgb, var(--red) 14%, transparent); display: inline-flex; align-items: center; gap: 5px; }
 .pill-s.live i { width: 6px; height: 6px; border-radius: 50%; background: var(--red); animation: livepulse 1.4s ease-in-out infinite; }
 @keyframes livepulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+
+/* tables on the carbon background: rows sit on a panel (no lone lines floating over the pattern) */
+.table tbody tr:last-child td { border-bottom: 0; }
+[data-theme="dark"]:not([data-bg="plain"]) .table tbody td { background: color-mix(in srgb, var(--panel) 90%, transparent); }
+[data-theme="dark"]:not([data-bg="plain"]) .table tbody tr:last-child td:first-child { border-bottom-left-radius: 12px; }
+[data-theme="dark"]:not([data-bg="plain"]) .table tbody tr:last-child td:last-child { border-bottom-right-radius: 12px; }

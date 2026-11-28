@@ -2,6 +2,9 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.26.6
+- Tables (Print log, list view, …) on the carbon background: rows sit on a dark panel with rounded bottom corners, no more lone line floating under the last row
+
 ## 1.26.5
 - Security (CodeQL #41, #42): printer status no longer passes exception text to the browser – an offline printer shows a fixed reason (*cannot reach the printer*, *access denied – check the API key*, *timeout* …); the full error is written to the container log once
 
