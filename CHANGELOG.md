@@ -2,6 +2,9 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.25.14
+- Zip downloads are named after their content instead of `zhopdeck-<date>.zip`: one file → `name.zip`, a model / folder → `Folder name.zip` (paths inside start at that folder); a mixed selection → `6 files <date>.zip`
+
 ## 1.25.13
 - Fix: a redone preview could keep showing the old picture – thumbnails are cached by the browser for 30 days and the cache key didn't change when only the picture changed. The key now includes the thumbnail's file time
 - Fix: .blend files analysed with 1.25.11 were not redone by 1.25.12 (their preview kind was skipped). They are now

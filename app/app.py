@@ -33,7 +33,7 @@ logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("zhopdeck")
 
-VERSION = "1.25.13"  # bump on every release - shown in the UI
+VERSION = "1.25.14"  # bump on every release - shown in the UI
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "4096"))
 STATUSES = ["none", "want", "queued", "printing", "printed", "failed"]
@@ -903,11 +903,31 @@ def download_many():
         return err("no files")
     marks = ",".join("?" * len(ids))
     rows = db.q(f"SELECT * FROM files WHERE id IN ({marks}) AND missing=0", ids)
+    # name the zip after what is in it: one file -> its name, one folder / model -> the folder's name;
+    # paths inside are relative to that folder, so "Extract all" gives Folder/... and not Folder/a/b/Folder/...
+    common = None
+    if rows and len({r["root"] for r in rows}) == 1:
+        parts = [(r["folder"] or "").strip("/").split("/") if r["folder"] else [] for r in rows]
+        common = []
+        for seg in zip(*parts) if parts else []:
+            if len(set(seg)) != 1:
+                break
+            common.append(seg[0])
+    prefix = "/".join(common or [])
+    if len(rows) == 1:
+        zname = rows[0]["name"].rsplit(".", 1)[0] if "." in rows[0]["name"] else rows[0]["name"]
+    elif common:
+        zname = common[-1]
+    else:
+        zname = f"{len(rows)} files {time.strftime('%Y-%m-%d %H%M')}"
+    zname = re.sub(r'[\\/:*?"<>|\x00-\x1f]', "_", zname).strip(" .") or "files"
     tmp = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
     used = set()
     with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED, compresslevel=3) as z:
         for r in rows:
             arc = (r["folder"] + "/" + r["name"]).strip("/")
+            if prefix and arc.startswith(prefix + "/"):
+                arc = arc[len(prefix) + 1:]
             base, i = arc, 1
             while arc in used:
                 arc = f"{base.rsplit('.', 1)[0]} ({i}).{r['ext']}"
@@ -916,7 +936,7 @@ def download_many():
             if os.path.exists(r["path"]):
                 z.write(r["path"], arc)
     tmp.close()
-    resp = send_file(tmp.name, as_attachment=True, download_name=f"zhopdeck-{time.strftime('%Y%m%d-%H%M')}.zip")
+    resp = send_file(tmp.name, as_attachment=True, download_name=zname + ".zip")
     resp.call_on_close(lambda: os.unlink(tmp.name))
     return resp
 
