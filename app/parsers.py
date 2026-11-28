@@ -4,11 +4,12 @@ import io
 import json
 import re
 import struct
+import numpy as np
 import zlib
 import zipfile
 import xml.etree.ElementTree as ET
 
-from PIL import Image
+from PIL import Image, ImageFilter
 
 GCODE_EXTS = {"gcode", "gco", "g", "bgcode"}
 HEAD_BYTES = 512 * 1024
@@ -204,6 +205,121 @@ def _blend_stream(path):
     return f
 
 
+def _components(mask):
+    """Connected areas of a small boolean mask -> list of (size, y0, x0, y1, x1)."""
+    h, w = mask.shape
+    seen = np.zeros_like(mask)
+    out = []
+    ys, xs = np.nonzero(mask)
+    for y, x in zip(ys.tolist(), xs.tolist()):
+        if seen[y, x]:
+            continue
+        seen[y, x] = True
+        stack, n, y0, x0, y1, x1 = [(y, x)], 0, y, x, y, x
+        while stack:
+            cy, cx = stack.pop()
+            n += 1
+            y0, x0, y1, x1 = min(y0, cy), min(x0, cx), max(y1, cy), max(x1, cx)
+            for ny, nx in ((cy - 1, cx), (cy + 1, cx), (cy, cx - 1), (cy, cx + 1)):
+                if 0 <= ny < h and 0 <= nx < w and mask[ny, nx] and not seen[ny, nx]:
+                    seen[ny, nx] = True
+                    stack.append((ny, nx))
+        out.append((n, y0, x0, y1, x1))
+    return sorted(out, reverse=True)
+
+
+def tidy_screenshot_preview(im, out=512):
+    """Blender's preview is often a screenshot of the whole window: tiny model, lots of UI. Find the 3D viewport
+    (the big area of one background colour), then the model inside it, and crop/zoom to it."""
+    try:
+        im = im.convert("RGBA")
+        a = np.asarray(im)
+        alpha = a[:, :, 3] > 8
+        rows, cols = np.nonzero(alpha.any(1))[0], np.nonzero(alpha.any(0))[0]
+        if not len(rows) or not len(cols):
+            return im
+        inner = alpha[rows[0]:rows[-1] + 1, cols[0]:cols[-1] + 1]
+        if inner.mean() < 0.95:  # already a cut-out (render with transparent background): just centre it
+            sub = im.crop((int(cols[0]), int(rows[0]), int(cols[-1]) + 1, int(rows[-1]) + 1))
+            side = int(max(sub.size) * 1.15) + 2
+            sq = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+            sq.alpha_composite(sub, ((side - sub.width) // 2, (side - sub.height) // 2))
+            return sq.resize((out, out), Image.LANCZOS) if side < out else sq
+        a = a[rows[0]:rows[-1] + 1, cols[0]:cols[-1] + 1, :3].astype(np.int16)
+        h, w = a.shape[:2]
+        if h < 24 or w < 24:
+            return im
+        mid = a[h // 4: 3 * h // 4, w // 4: 3 * w // 4].reshape(-1, 3).astype(np.int64) // 6
+        keys, cnt = np.unique(mid[:, 0] * 10000 + mid[:, 1] * 100 + mid[:, 2], return_counts=True)
+        k = int(keys[cnt.argmax()])
+        bg = np.array([k // 10000, (k // 100) % 100, k % 100]) * 6 + 3
+        diff = np.abs(a - bg).max(2)
+        isbg = diff <= 16
+        # the viewport = the biggest connected area of that colour (the model inside it doesn't matter)
+        closed = isbg.copy()  # bridge thin lines (axis lines cut the viewport in pieces)
+        for _ in range(2):
+            c2 = closed.copy()
+            c2[1:, :] |= closed[:-1, :]; c2[:-1, :] |= closed[1:, :]; c2[:, 1:] |= closed[:, :-1]; c2[:, :-1] |= closed[:, 1:]
+            closed = c2
+        vp = _components(closed)
+        if not vp:
+            return im
+        _n, vy0, vx0, vy1, vx1 = vp[0]
+        if (vy1 - vy0) < h * 0.3 or (vx1 - vx0) < w * 0.3 or _n < h * w * 0.12:
+            return im
+        y0, y1, x0, x1 = vy0 + 2, vy1 - 2, vx0 + 2, vx1 - 2
+        view = a[y0:y1 + 1, x0:x1 + 1]
+        obj = diff[y0:y1 + 1, x0:x1 + 1] > 34
+        # drop thin things (axis lines, grid, 3D cursor ring): erode then keep areas that survive
+        er = obj.copy()
+        er[1:, :] &= obj[:-1, :]; er[:-1, :] &= obj[1:, :]; er[:, 1:] &= obj[:, :-1]; er[:, :-1] &= obj[:, 1:]
+        comps = _components(er)
+        vh, vw = view.shape[:2]
+        # the navigation gizmo lives in the top-right corner of the viewport
+        comps = [cp for cp in comps if not (cp[3] < vh * 0.35 and cp[2] > vw * 0.72 and cp[0] < vh * vw * 0.03)]
+        if not comps or comps[0][0] < 6:
+            box = (0, 0, vh - 1, vw - 1)
+        else:
+            big = comps[0]
+            by0, bx0, by1, bx1 = big[1:]
+            for cp in comps[1:]:  # parts of the same model close to the biggest one
+                if cp[0] >= max(3, big[0] * 0.04):
+                    py, px = (by1 - by0) * 0.6 + 4, (bx1 - bx0) * 0.6 + 4
+                    if cp[1] <= by1 + py and cp[3] >= by0 - py and cp[2] <= bx1 + px and cp[4] >= bx0 - px:
+                        by0, bx0, by1, bx1 = min(by0, cp[1]), min(bx0, cp[2]), max(by1, cp[3]), max(bx1, cp[4])
+            box = (by0, bx0, by1, bx1)
+        by0, bx0, by1, bx1 = box
+        side = max(by1 - by0, bx1 - bx0) * 1.5 + 6  # model fills about 2/3 of the picture
+        side = min(side, vh, vw) if side > min(vh, vw) else side
+        cy, cx = (by0 + by1) / 2, (bx0 + bx1) / 2
+        t, l = int(round(cy - side / 2)), int(round(cx - side / 2))
+        t, l = max(0, min(t, vh - int(side))), max(0, min(l, vw - int(side)))
+        # cut the model out of the grey viewport (soft edge) so it sits on the card like the other previews
+        if box != (0, 0, vh - 1, vw - 1):
+            m = diff[y0:y1 + 1, x0:x1 + 1] > 22
+            e = m.copy()
+            e[1:, :] &= m[:-1, :]; e[:-1, :] &= m[1:, :]; e[:, 1:] &= m[:, :-1]; e[:, :-1] &= m[:, 1:]
+            d = e.copy()  # opening = erode + dilate: thin grid / axis lines disappear, the model stays
+            d[1:, :] |= e[:-1, :]; d[:-1, :] |= e[1:, :]; d[:, 1:] |= e[:, :-1]; d[:, :-1] |= e[:, 1:]
+            alpha_m = Image.fromarray((d * 255).astype(np.uint8))
+        else:
+            alpha_m = Image.new("L", (vw, vh), 255)
+        rgba = Image.fromarray(view.astype(np.uint8)).convert("RGBA")
+        rgba.putalpha(alpha_m)
+        crop = rgba.crop((l, t, l + int(side), t + int(side)))
+        if crop.width < 8:
+            return im
+        # small source: double with NEAREST first so edges stay crisp, then smooth up to size
+        while crop.width * 2 <= out // 2:
+            crop = crop.resize((crop.width * 2, crop.height * 2), Image.NEAREST)
+        big = crop.resize((out, out), Image.LANCZOS)
+        a2 = big.getchannel("A").filter(ImageFilter.GaussianBlur(out / 200))
+        big.putalpha(a2)
+        return big
+    except Exception:
+        return im
+
+
 def blend_thumbnail(path, max_scan=64 * 1024 * 1024):
     """The preview Blender saves in the 'TEST' block of a .blend (on by default). Returns a PIL image or None."""
     fh = _blend_stream(path)
@@ -246,7 +362,7 @@ def blend_thumbnail(path, max_scan=64 * 1024 * 1024):
                     if not (0 < w <= 1024 and 0 < h <= 1024) or len(data) < 8 + w * h * 4:
                         return None
                     im = Image.frombytes("RGBA", (w, h), bytes(data[8:8 + w * h * 4]))
-                    return im.transpose(Image.FLIP_TOP_BOTTOM)  # stored bottom row first
+                    return tidy_screenshot_preview(im.transpose(Image.FLIP_TOP_BOTTOM))  # stored bottom row first
                 if code in (b"ENDB", b"DNA1") or size < 0:
                     return None
                 left = size

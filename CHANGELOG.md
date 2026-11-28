@@ -2,6 +2,9 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.25.12
+- Blender previews look much better: when the saved preview is a screenshot of the whole Blender window, Z-Hop Deck finds the 3D viewport, cuts the model out of the grey background (axis lines, grid, gizmo and side panels are left out) and zooms it to fill the card. Camera renders are centred, transparent renders kept as they are. Existing .blend files are redone once
+
 ## 1.25.11
 - Blender `.blend`: the preview picture Blender saves in the file is used as the thumbnail – plain, gzip and zstd-compressed files, Blender 2.5 up to 5.x. New dependency `zstandard`. Existing files are re-analysed once
 
