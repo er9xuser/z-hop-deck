@@ -158,6 +158,49 @@ def parse_bgcode(path):
     return meta, (thumbs[0][1] if thumbs else None)
 
 
+def zip_member_image(path, names):
+    try:
+        with zipfile.ZipFile(path) as z:
+            low = {n.lower(): n for n in z.namelist()}
+            for want in names:
+                if want in low:
+                    im = Image.open(io.BytesIO(z.read(low[want])))
+                    im.load()
+                    return im
+    except Exception:
+        return None
+    return None
+
+
+def embedded_picture(path, max_scan=24 * 1024 * 1024):
+    """Many CAD formats keep a preview PNG / JPEG inside their binary (SketchUp, eDrawings, SolidWorks, DWG).
+    Scan the start of the file for one and return the biggest picture that decodes, or None."""
+    try:
+        with open(path, "rb") as f:
+            data = f.read(max_scan)
+    except OSError:
+        return None
+    best = None
+    for sig, end, extra in ((b"\x89PNG\r\n\x1a\n", b"IEND", 8), (b"\xff\xd8\xff", b"\xff\xd9", 2)):
+        pos = 0
+        for _ in range(40):
+            i = data.find(sig, pos)
+            if i < 0:
+                break
+            j = data.find(end, i + 8)
+            if j < 0:
+                break
+            try:
+                im = Image.open(io.BytesIO(data[i:j + extra]))
+                im.load()
+                if im.width >= 48 and im.height >= 48 and (best is None or im.width * im.height > best.width * best.height):
+                    best = im
+            except Exception:
+                pass
+            pos = j + extra
+    return best
+
+
 def f3d_preview(path, _depth=0, _data=None):
     """Fusion 360 .f3d / .f3z are ZIPs; Fusion stores a picture at FusionAssetName[Active]/Previews/small.png.
     .f3z holds one or more .f3d inside. Returns a PIL image or None."""

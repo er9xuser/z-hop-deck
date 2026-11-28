@@ -2,6 +2,10 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.26.9
+- eDrawings (`.easm`, `.eprt`, `.edrw`) and SolidWorks (`.sldprt`, `.sldasm`) files are now part of the library (indexed, downloadable)
+- Preview pictures stored inside CAD files are used as thumbnails: SketchUp, eDrawings, SolidWorks, DWG (embedded PNG/JPEG) and FreeCAD (`thumbnails/Thumbnail.png`). No 3D view for these formats. Existing files are re-analysed once
+
 ## 1.26.8
 - OrcaSlicer *Device* tab follows new uploads: Orca opens the page once and keeps it, so it kept showing the first G-code. The page opened from `/p/<printer>` now notices every new upload from Orca for that printer (also the same name sliced again) and switches to it by itself, with a short note
 

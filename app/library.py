@@ -53,10 +53,13 @@ KINDS = {
     "stl": "mesh", "obj": "mesh", "3mf": "mesh",
     "step": "cad", "stp": "cad", "iges": "cad", "igs": "cad", "f3d": "cad", "f3z": "cad", "scad": "cad",
     "blend": "cad", "fcstd": "cad", "skp": "cad", "dwg": "cad", "dxf": "cad",
+    "easm": "cad", "eprt": "cad", "edrw": "cad", "sldprt": "cad", "sldasm": "cad",  # eDrawings / SolidWorks
     "gcode": "gcode", "gco": "gcode", "g": "gcode", "bgcode": "gcode",
     "zip": "archive",
 }
 IMAGE_EXTS = {"jpg", "jpeg", "png", "webp", "gif"}
+# CAD formats that often carry a preview picture inside (SketchUp, eDrawings, SolidWorks, DWG)
+EMBEDDED_PIC_EXTS = {"skp", "easm", "eprt", "edrw", "sldprt", "sldasm", "dwg"}
 SKIP_DIRS = {"@eaDir", "#recycle", "#snapshot", "$RECYCLE.BIN", "System Volume Information", "lost+found"}
 
 status = {"state": "idle", "phase": "", "done": 0, "total": 0, "current": "", "last_scan": None,
@@ -562,6 +565,14 @@ def _analyze(fid, force_thumb=False):
                     meta = {"scad_error": str(e)}
             else:
                 meta = {"scad_error": "OpenSCAD is not installed in this container"}
+        elif ext == "fcstd":  # FreeCAD: ZIP with thumbnails/Thumbnail.png
+            im = parsers.zip_member_image(path, ("thumbnails/thumbnail.png",))
+            if im is not None:
+                thumb_img, thumb_kind = im, 2
+        elif ext in EMBEDDED_PIC_EXTS:
+            im = parsers.embedded_picture(path)
+            if im is not None:
+                thumb_img, thumb_kind = im, 2
         elif ext == "blend":
             im = parsers.blend_thumbnail(path)
             if im is not None:
@@ -717,6 +728,10 @@ def start_background():
     if db.setting("f3d_thumbs") != "1":  # 1.25.8: Fusion 360 preview picture
         db.ex("UPDATE files SET analyzed=0 WHERE missing=0 AND ext IN ('f3d','f3z') AND thumb IN (0,1,4)")
         db.set_setting("f3d_thumbs", "1")
+    if db.setting("cad_pics") != "1":  # 1.26.9: embedded pictures of SketchUp / eDrawings / SolidWorks / DWG / FreeCAD
+        db.ex("UPDATE files SET analyzed=0 WHERE missing=0 AND ext IN ('skp','easm','eprt','edrw','sldprt','sldasm',"
+              "'dwg','fcstd') AND thumb IN (0,1,4)")
+        db.set_setting("cad_pics", "1")
     if db.setting("blend_thumbs") != "3":  # 1.25.11 Blender preview, 1.25.13 cropped to the model (also kind 2)
         db.ex("UPDATE files SET analyzed=0 WHERE missing=0 AND ext='blend' AND thumb IN (0,1,2,4)")
         db.set_setting("blend_thumbs", "3")

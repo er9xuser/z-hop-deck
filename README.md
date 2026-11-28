@@ -75,7 +75,8 @@ Your database, previews and settings live in `./data` and are kept. The version 
 | Images, PDF, TXT, Markdown | Shown with the model: photo gallery, PDF viewer, readme |
 | Fusion 360 `.f3d` / `.f3z` | Indexed and downloadable, preview picture saved by Fusion |
 | Blender `.blend` | Indexed and downloadable, preview picture saved by Blender (also compressed files) |
-| IGES, SketchUp, … | Indexed and downloadable, preview from an image in the same folder |
+| SketchUp, eDrawings (`.easm` `.eprt` `.edrw`), SolidWorks, DWG, FreeCAD | Indexed and downloadable, preview picture stored inside the file when there is one |
+| IGES, … | Indexed and downloadable, preview from an image in the same folder |
 
 ## Requirements
 
