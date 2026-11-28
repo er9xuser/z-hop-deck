@@ -34,7 +34,7 @@ logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("zhopdeck")
 
-VERSION = "1.26.7"  # bump on every release - shown in the UI
+VERSION = "1.26.8"  # bump on every release - shown in the UI
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "4096"))
 STATUSES = ["none", "want", "queued", "printing", "printed", "failed"]
@@ -1690,9 +1690,18 @@ def printer_web(pid):
     last = (db.setting(f"orca_last_{pid}", "") or "").split(":")
     if len(last) == 2 and last[0].isdigit() and time.time() - float(last[1] or 0) < 12 * 3600:
         if db.q1("SELECT id FROM files WHERE id=? AND missing=0", (int(last[0]),)):
-            return redirect(f"/#/file/{last[0]}")
+            # ?follow=: Orca keeps the Device tab open - the page then jumps to every new upload by itself
+            return redirect(f"/?follow={pid}#/file/{last[0]}")
     url = printer_web_url(p)
     return redirect(url or "/#/printers")
+
+
+@app.get("/api/printers/<int:pid>/orca-last")
+def orca_last(pid):
+    last = (db.setting(f"orca_last_{pid}", "") or "").split(":")
+    if len(last) == 2 and last[0].isdigit():
+        return jsonify({"file_id": int(last[0]), "at": int(float(last[1] or 0))})
+    return jsonify({"file_id": None, "at": 0})
 
 
 @app.post("/api/settings/octo-key")

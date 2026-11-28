@@ -2,6 +2,9 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.26.8
+- OrcaSlicer *Device* tab follows new uploads: Orca opens the page once and keeps it, so it kept showing the first G-code. The page opened from `/p/<printer>` now notices every new upload from Orca for that printer (also the same name sliced again) and switches to it by itself, with a short note
+
 ## 1.26.7
 - Home → Your library: the picture shows the model being printed right now (*Now printing 42 %*, red dot), otherwise the newest model; switches back by itself when the print ends
 - Fix: Upload from Home (or any page outside the Library) pre-selected the collection / folder that was open in the Library earlier, so new files landed in that collection. Only what is open in the Library right now is taken over

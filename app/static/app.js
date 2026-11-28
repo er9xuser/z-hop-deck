@@ -2513,6 +2513,7 @@ async function pollScan(force) {
     $('#scan-now').onclick = async () => { await api('/scan', { method: 'POST' }); pollScan(true); };
   }
   const changed = S._libSig != null && st.lib_sig && st.lib_sig !== S._libSig;
+  if (FOLLOW && (changed || S._followAt == null)) followOrca();
   if (st.lib_sig) S._libSig = st.lib_sig;
   if (lastScanState === 'busy' && !busy) {
     await loadMeta(); renderNav();
@@ -2537,6 +2538,20 @@ async function pollPrinting() {
   const changed = key(m) !== key(S.printing || {});
   S.printing = m;
   if (changed && S.route === 'library' && !detailState && $('#cards-host')) renderList(true);
+}
+// opened from OrcaSlicer's Device tab (/p/<printer>): show each new upload from Orca without a manual reload
+const FOLLOW = new URLSearchParams(location.search).get('follow');
+async function followOrca() {
+  let r;
+  try { r = await api(`/printers/${FOLLOW}/orca-last`); } catch { return; }
+  if (!r.file_id) return;
+  const first = S._followAt == null;
+  if (!first && r.at > S._followAt) {
+    if (location.hash === '#/file/' + r.file_id) openDetail(r.file_id);  // same name uploaded again: reload it
+    else location.hash = '#/file/' + r.file_id;
+    toast('New upload from OrcaSlicer', 'ok');
+  }
+  S._followAt = r.at;
 }
 let liveBusy = false;
 async function liveRefresh(busy) {

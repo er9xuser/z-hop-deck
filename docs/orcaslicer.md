@@ -76,7 +76,7 @@ Slice, then press **Upload** (or *Upload and Print*).
 | *Only upload* (default) | The file is sent to the printer but not started, even with *Upload and Print*. Start it on the printer's web page – useful with a multi-material unit (AFC, MMU, ERCF) where you choose the lane first. |
 | *Start printing right away* | *Upload and Print* starts the print immediately. |
 
-OrcaSlicer's **Device** tab opens the file you just uploaded in Z-Hop Deck (for 12 hours), afterwards the printer's own web page.
+OrcaSlicer's **Device** tab opens the file you just uploaded in Z-Hop Deck (for 12 hours), afterwards the printer's own web page. While it stays open it follows every new upload from Orca by itself – no reload needed.
 
 ## 6. Print – and it is logged
 
