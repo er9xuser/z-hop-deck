@@ -2,6 +2,10 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.25.6
+- Big 3MF files (e.g. 20 MB painted multi-colour projects) no longer get the server OOM-killed: the 3MF model XML is now streamed instead of loaded as a whole tree. A 18 MB / 1.6 M-triangle painted 3MF went from >1.4 GB (just to read it) to ~0.5 GB for the whole preview + 3D view
+- Files and 3D views that were skipped as "ran out of memory" are retried once automatically
+
 ## 1.25.5
 - Fix: a normal restart (update, `docker compose up`, LXC reboot) while a preview was being made was reported as *"the server ran out of memory on this file"* and the preview was skipped for good. Z-Hop Deck now checks the container's OOM-kill counter: after a plain restart the file is simply done again; only a real out-of-memory kill (or dying 3 times on the same file) skips it. Files marked by older versions are retried once automatically
 

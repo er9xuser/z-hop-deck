@@ -4,6 +4,7 @@ import os
 import re
 import struct
 import zipfile
+from array import array
 import xml.etree.ElementTree as ET
 
 import numpy as np
@@ -214,63 +215,107 @@ def load_3mf(path, with_colors=False):
         a_mmu = f"{{{NS_SLIC3R}}}mmu_segmentation"
 
         def parse_file(fname):
+            """Stream one .model file (iterparse): big 3MFs hold hundreds of MB of XML - building the whole tree
+            took gigabytes and got the server OOM-killed. Returns {"build": [(objectid, path, transform)]}."""
             if fname in parsed:
                 return parsed[fname]
             if fname not in names:
                 parsed[fname] = None
                 return None
-            root = ET.fromstring(z.read(fname))
-            parsed[fname] = root
-            if with_colors:
-                for bm in root.iter(f"{{{NS_CORE}}}basematerials"):
-                    groups[(fname, bm.get("id"))] = [((b.get("displaycolor") or "#888888")[:7], (b.get("name") or "")[:60])
-                                                     for b in bm]
-                for cg in root.iter(f"{{{NS_MAT}}}colorgroup"):
-                    groups[(fname, cg.get("id"))] = [((c.get("color") or "#888888")[:7], "") for c in cg]
-            for obj in root.iter(f"{{{NS_CORE}}}object"):
-                oid = obj.get("id")
-                mesh = obj.find(f"{{{NS_CORE}}}mesh")
-                if mesh is not None:
-                    vs = mesh.find(f"{{{NS_CORE}}}vertices")
-                    ts = mesh.find(f"{{{NS_CORE}}}triangles")
-                    if vs is None or ts is None:
-                        continue
-                    v = np.array([(float(e.get("x")), float(e.get("y")), float(e.get("z")))
-                                  for e in vs], dtype=np.float32)
-                    t = np.array([(int(e.get("v1")), int(e.get("v2")), int(e.get("v3")))
-                                  for e in ts], dtype=np.int64)
-                    paint = matcol = None
-                    if with_colors and len(t):
-                        codes = [e.get(a_paint) or e.get(a_mmu) for e in ts]
-                        if any(codes):
-                            paint = np.array([_paint_state(c, paint_cache) if c else 0 for c in codes], dtype=np.int16)
-                        opid, opi = obj.get("pid"), obj.get("pindex")
-                        if opid or any(e.get("pid") or e.get("p1") for e in ts):
-                            cols = []
-                            for e in ts:
-                                g = groups.get((fname, e.get("pid") or opid))
-                                k = e.get("p1") or opi
-                                cols.append(g[int(k)] if g and k is not None and k.isdigit() and int(k) < len(g) else None)
-                            if any(cols):
-                                matcol = cols
-                    if len(v) and len(t):
-                        ok = (t < len(v)).all(1)
-                        t = t[ok]
-                        if paint is not None:
-                            paint = paint[ok]
-                        if matcol is not None:
-                            matcol = [c for c, k in zip(matcol, ok) if k]
-                        objects[(fname, oid)] = ("mesh", v[t], paint, matcol)
-                else:
-                    comps = obj.find(f"{{{NS_CORE}}}components")
-                    lst = []
-                    if comps is not None:
-                        for c in comps:
-                            p = c.get(f"{{{NS_PROD}}}path")
-                            lst.append(((p.lstrip("/") if p else fname), c.get("objectid"),
-                                        _parse_transform(c.get("transform"))))
-                    objects[(fname, oid)] = ("comp", lst)
-            return root
+            info = {"build": []}
+            parsed[fname] = info
+            T_OBJ, T_MESH = f"{{{NS_CORE}}}object", f"{{{NS_CORE}}}mesh"
+            T_VS, T_TS = f"{{{NS_CORE}}}vertices", f"{{{NS_CORE}}}triangles"
+            T_V, T_T = f"{{{NS_CORE}}}vertex", f"{{{NS_CORE}}}triangle"
+            T_COMP, T_ITEM = f"{{{NS_CORE}}}component", f"{{{NS_CORE}}}item"
+            T_BM, T_CG = f"{{{NS_CORE}}}basematerials", f"{{{NS_MAT}}}colorgroup"
+            A_PATH = f"{{{NS_PROD}}}path"
+            cur = None  # object being read
+            box = None  # <vertices>/<triangles> element whose children we drop as we go
+            stack = []
+            try:
+                with z.open(fname) as fh:
+                    for ev, e in ET.iterparse(fh, events=("start", "end")):
+                        tag = e.tag
+                        if ev == "start":
+                            stack.append(e)
+                            if tag == T_OBJ:
+                                cur = {"id": e.get("id"), "pid": e.get("pid"), "pindex": e.get("pindex"),
+                                       "mesh": False, "v": array("f"), "t": array("i"), "paint": None,
+                                       "cols": None, "comps": []}
+                            elif tag == T_MESH and cur is not None:
+                                cur["mesh"] = True
+                            elif tag in (T_VS, T_TS):
+                                box = e
+                            continue
+                        stack.pop()
+                        parent = stack[-1] if stack else None
+                        if tag == T_V and cur is not None:
+                            cur["v"].extend((float(e.get("x")), float(e.get("y")), float(e.get("z"))))
+                        elif tag == T_T and cur is not None:
+                            n = len(cur["t"]) // 3
+                            cur["t"].extend((int(e.get("v1")), int(e.get("v2")), int(e.get("v3"))))
+                            if with_colors:
+                                c = e.get(a_paint) or e.get(a_mmu)
+                                if c:
+                                    if cur["paint"] is None:
+                                        cur["paint"] = array("h", bytes(2 * n))
+                                    cur["paint"].append(_paint_state(c, paint_cache))
+                                elif cur["paint"] is not None:
+                                    cur["paint"].append(0)
+                                tp, k = e.get("pid"), e.get("p1")
+                                if tp or k or cur["pid"]:
+                                    g = groups.get((fname, tp or cur["pid"]))
+                                    k = k or cur["pindex"]
+                                    col = g[int(k)] if g and k is not None and k.isdigit() and int(k) < len(g) else None
+                                    if col is not None and cur["cols"] is None:
+                                        cur["cols"] = [None] * n
+                                    if cur["cols"] is not None:
+                                        cur["cols"].append(col)
+                                elif cur["cols"] is not None:
+                                    cur["cols"].append(None)
+                        elif tag == T_COMP and cur is not None:
+                            pth = e.get(A_PATH)
+                            cur["comps"].append(((pth.lstrip("/") if pth else fname), e.get("objectid"),
+                                                 _parse_transform(e.get("transform"))))
+                        elif tag == T_ITEM:
+                            info["build"].append((e.get("objectid"), e.get(A_PATH), e.get("transform")))
+                        elif tag == T_BM and with_colors:
+                            groups[(fname, e.get("id"))] = [((b.get("displaycolor") or "#888888")[:7],
+                                                             (b.get("name") or "")[:60]) for b in e]
+                        elif tag == T_CG and with_colors:
+                            groups[(fname, e.get("id"))] = [((c.get("color") or "#888888")[:7], "") for c in e]
+                        elif tag == T_OBJ and cur is not None:
+                            _store_object(fname, cur)
+                            cur = None
+                        elif tag in (T_VS, T_TS):
+                            box = None
+                        if box is not None and parent is box:
+                            box.clear()  # drop the handled vertex/triangle - keeps memory flat
+                        elif parent is None or parent.tag not in (T_BM, T_CG):  # materials: read at their end
+                            e.clear()
+            except ET.ParseError as ex:
+                raise MeshError(f"broken 3MF XML ({ex})")
+            return info
+
+        def _store_object(fname, cur):
+            if cur["mesh"]:
+                v = np.frombuffer(cur["v"], dtype=np.float32).reshape(-1, 3)
+                t = np.frombuffer(cur["t"], dtype=np.int32).reshape(-1, 3)
+                if not len(v) or not len(t):
+                    return
+                paint = np.frombuffer(cur["paint"], dtype=np.int16) if cur["paint"] is not None else None
+                matcol = cur["cols"] if cur["cols"] is not None and any(cur["cols"]) else None
+                ok = ((t >= 0) & (t < len(v))).all(1)
+                if not ok.all():
+                    t = t[ok]
+                    if paint is not None:
+                        paint = paint[ok]
+                    if matcol is not None:
+                        matcol = [c for c, k in zip(matcol, ok) if k]
+                objects[(fname, cur["id"])] = ("mesh", v[t], paint, matcol)
+            else:
+                objects[(fname, cur["id"])] = ("comp", cur["comps"])
 
         ext_map = _object_extruders(z, names) if with_colors else {}
 
@@ -298,13 +343,10 @@ def load_3mf(path, with_colors=False):
         if root is None:
             raise MeshError("cannot read 3MF root model")
         parts = []
-        build = root.find(f"{{{NS_CORE}}}build")
-        if build is not None:
-            for item in build:
-                p = item.get(f"{{{NS_PROD}}}path")
-                f = p.lstrip("/") if p else root_model
-                for t, pt, mc, ex in resolve(f, item.get("objectid")):
-                    parts.append((_apply(t, _parse_transform(item.get("transform"))), pt, mc, ex))
+        for oid, p, tr in root["build"]:
+            f = p.lstrip("/") if p else root_model
+            for t, pt, mc, ex in resolve(f, oid):
+                parts.append((_apply(t, _parse_transform(tr)), pt, mc, ex))
         if not parts:  # fall back to every mesh we found
             for k, o in objects.items():
                 if o[0] == "mesh":

@@ -694,9 +694,11 @@ def request_rethumb_all():
 
 def start_background():
     _recover_from_crash()
-    if db.setting("oom_recheck") != "1":  # 1.25.5: older versions took every restart for "out of memory" - retry those once
+    if db.setting("oom_recheck") != "2":  # 1.25.5 restart != OOM, 1.25.6 lean 3MF reader: retry those files once
         db.ex("UPDATE files SET analyzed=0, error=NULL WHERE error LIKE 'preview skipped: the server ran out of memory%'")
-        db.set_setting("oom_recheck", "1")
+        for k in ("bundle_skip", "view_skip", "viewb_skip"):
+            db.set_setting(k, "")
+        db.set_setting("oom_recheck", "2")
     if db.setting("render_ver") != RENDER_VERSION:  # renderer improved: redo rendered previews (not slicer images)
         db.ex("UPDATE files SET analyzed=0 WHERE missing=0 AND thumb IN (0,1)")
         db.set_setting("render_ver", RENDER_VERSION)
