@@ -557,6 +557,10 @@ def _analyze(fid, force_thumb=False):
                     meta = {"scad_error": str(e)}
             else:
                 meta = {"scad_error": "OpenSCAD is not installed in this container"}
+        elif ext == "blend":
+            im = parsers.blend_thumbnail(path)
+            if im is not None:
+                thumb_img, thumb_kind = im, 2
         elif ext in ("f3d", "f3z"):
             im = parsers.f3d_preview(path)
             if im is not None:
@@ -708,6 +712,9 @@ def start_background():
     if db.setting("f3d_thumbs") != "1":  # 1.25.8: Fusion 360 preview picture
         db.ex("UPDATE files SET analyzed=0 WHERE missing=0 AND ext IN ('f3d','f3z') AND thumb IN (0,1,4)")
         db.set_setting("f3d_thumbs", "1")
+    if db.setting("blend_thumbs") != "1":  # 1.25.11: Blender preview picture
+        db.ex("UPDATE files SET analyzed=0 WHERE missing=0 AND ext='blend' AND thumb IN (0,1,4)")
+        db.set_setting("blend_thumbs", "1")
     if db.setting("gcode_thumbs") != "1":  # 1.25.7: toolpath pictures for G-code without an embedded one, QOI, .bgcode
         db.ex("UPDATE files SET analyzed=0 WHERE missing=0 AND kind='gcode' AND thumb IN (0,1)")
         db.set_setting("gcode_thumbs", "1")

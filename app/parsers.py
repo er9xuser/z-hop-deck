@@ -186,6 +186,83 @@ def f3d_preview(path, _depth=0, _data=None):
     return None
 
 
+def _blend_stream(path):
+    """Open a .blend for reading: plain, gzip (old Blender) or zstd (Blender 3.0+)."""
+    f = open(path, "rb")
+    magic = f.read(4)
+    f.seek(0)
+    if magic[:2] == b"\x1f\x8b":
+        import gzip
+        return gzip.GzipFile(fileobj=f)
+    if magic == b"\x28\xb5\x2f\xfd":
+        try:
+            import zstandard
+        except ImportError:
+            f.close()
+            return None
+        return zstandard.ZstdDecompressor().stream_reader(f, closefd=True)
+    return f
+
+
+def blend_thumbnail(path, max_scan=64 * 1024 * 1024):
+    """The preview Blender saves in the 'TEST' block of a .blend (on by default). Returns a PIL image or None."""
+    fh = _blend_stream(path)
+    if fh is None:
+        return None
+    def readn(n):  # compressed streams may return short reads
+        buf = bytearray()
+        while len(buf) < n:
+            c = fh.read(n - len(buf))
+            if not c:
+                break
+            buf += c
+        return bytes(buf)
+    try:
+        with fh:
+            head = readn(12)
+            if not head.startswith(b"BLENDER"):
+                return None
+            if head[7:9].isdigit():  # Blender 5.x: "BLENDER17-01v0500" - 17 byte header, 64-bit block headers
+                hlen = int(head[7:9])
+                head += readn(hlen - 12)
+                bh_fmt, bh_len, end = "<4sIQqq", 32, "<"
+                lay = (0, 3, 4)          # code, size, count positions
+            else:                    # "BLENDER" + '_'|'-' (pointer size) + 'v'|'V' (endianness) + "279"
+                end = "<" if head[8:9] == b"v" else ">"
+                ptr = 8 if head[7:8] == b"-" else 4
+                bh_fmt = end + "4si" + ("Q" if ptr == 8 else "I") + "ii"
+                bh_len = struct.calcsize(bh_fmt)
+                lay = (0, 1, 4)
+            scanned = 0
+            while scanned < max_scan:
+                bh = readn(bh_len)
+                if len(bh) < bh_len:
+                    return None
+                v = struct.unpack(bh_fmt, bh)
+                code, size = v[lay[0]], v[lay[1]]
+                if code == b"TEST":
+                    data = readn(size)
+                    w, h = struct.unpack(end + "ii", data[:8])
+                    if not (0 < w <= 1024 and 0 < h <= 1024) or len(data) < 8 + w * h * 4:
+                        return None
+                    im = Image.frombytes("RGBA", (w, h), bytes(data[8:8 + w * h * 4]))
+                    return im.transpose(Image.FLIP_TOP_BOTTOM)  # stored bottom row first
+                if code in (b"ENDB", b"DNA1") or size < 0:
+                    return None
+                left = size
+                while left > 0:  # skip (streams can't seek)
+                    chunk = fh.read(min(left, 1 << 20))
+                    if not chunk:
+                        return None
+                    left -= len(chunk)
+                scanned += bh_len + size
+    except (OSError, struct.error, EOFError, ValueError):
+        return None
+    except Exception:
+        return None
+    return None
+
+
 def extract_gcode_thumbnails(text):
     """Return list of (w*h, PIL.Image) from '; thumbnail begin WxH len' blocks."""
     out = []

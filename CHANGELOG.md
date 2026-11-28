@@ -2,6 +2,9 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.25.11
+- Blender `.blend`: the preview picture Blender saves in the file is used as the thumbnail – plain, gzip and zstd-compressed files, Blender 2.5 up to 5.x. New dependency `zstandard`. Existing files are re-analysed once
+
 ## 1.25.10
 - STEP files: *Open in Cura* now works too – Cura can't import STEP, so it gets the STL Z-Hop Deck converted. With OrcaSlicer + Cura enabled the ▾ menu now also shows up on STEP files (OrcaSlicer / PrusaSlicer / Bambu Studio still get the original STEP)
 

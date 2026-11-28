@@ -74,7 +74,8 @@ Your database, previews and settings live in `./data` and are kept. The version 
 | ZIP | Extracted on upload (optional) or listed; preview of the largest model |
 | Images, PDF, TXT, Markdown | Shown with the model: photo gallery, PDF viewer, readme |
 | Fusion 360 `.f3d` / `.f3z` | Indexed and downloadable, preview picture saved by Fusion |
-| IGES, Blend, SketchUp, … | Indexed and downloadable, preview from an image in the same folder |
+| Blender `.blend` | Indexed and downloadable, preview picture saved by Blender (also compressed files) |
+| IGES, SketchUp, … | Indexed and downloadable, preview from an image in the same folder |
 
 ## Requirements
 
