@@ -741,6 +741,6 @@ tr.peek td { background: var(--accent-soft); }
 .hlive .lvmsg button { pointer-events: auto; }
 .hlive .lvinfo { position: absolute; left: 10px; bottom: 8px; color: var(--muted, #9aa3b2); pointer-events: none; text-shadow: 0 1px 2px #000; }
 
-.pill-s.live { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 60%, transparent); background: var(--accent-soft); display: inline-flex; align-items: center; gap: 5px; }
-.pill-s.live i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: livepulse 1.4s ease-in-out infinite; }
+.pill-s.live { color: var(--red); border-color: color-mix(in srgb, var(--red) 60%, transparent); background: color-mix(in srgb, var(--red) 14%, transparent); display: inline-flex; align-items: center; gap: 5px; }
+.pill-s.live i { width: 6px; height: 6px; border-radius: 50%; background: var(--red); animation: livepulse 1.4s ease-in-out infinite; }
 @keyframes livepulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }

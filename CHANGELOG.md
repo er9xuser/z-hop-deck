@@ -2,6 +2,9 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.26.2
+- The *Printing* pill is red
+
 ## 1.26.1
 - Library: the file a printer is printing right now gets a pulsing **Printing 42 %** pill (also on its model folder card), no matter where the print was started (Mainsail, OrcaSlicer, Z-Hop Deck). Checked every ~15 s while the Library is open; the file is matched by name (and size if there are several)
 - Printer status is cached for a few seconds and shared by all open pages; an unreachable printer is asked less often
