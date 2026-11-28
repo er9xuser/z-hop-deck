@@ -570,9 +570,13 @@ def _analyze(fid, force_thumb=False):
             if im is not None:
                 thumb_img, thumb_kind = im, 2
         elif ext in EMBEDDED_PIC_EXTS:
-            im = parsers.embedded_picture(path)
+            # eDrawings (.easm/.eprt/.edrw) are ZIPs with preview.jpg; others hide a PNG/JPEG in their binary
+            im = parsers.zip_member_image(path, ("preview.png", "preview.jpg", "preview.jpeg")) \
+                if zipfile.is_zipfile(path) else None
+            if im is None:
+                im = parsers.embedded_picture(path)
             if im is not None:
-                thumb_img, thumb_kind = im, 2
+                thumb_img, thumb_kind = parsers.tidy_screenshot_preview(im), 2
         elif ext == "blend":
             im = parsers.blend_thumbnail(path)
             if im is not None:
@@ -728,10 +732,10 @@ def start_background():
     if db.setting("f3d_thumbs") != "1":  # 1.25.8: Fusion 360 preview picture
         db.ex("UPDATE files SET analyzed=0 WHERE missing=0 AND ext IN ('f3d','f3z') AND thumb IN (0,1,4)")
         db.set_setting("f3d_thumbs", "1")
-    if db.setting("cad_pics") != "1":  # 1.26.9: embedded pictures of SketchUp / eDrawings / SolidWorks / DWG / FreeCAD
+    if db.setting("cad_pics") != "2":  # 1.26.9 / 1.26.12: embedded pictures (eDrawings preview.jpg, SketchUp, DWG, FreeCAD)
         db.ex("UPDATE files SET analyzed=0 WHERE missing=0 AND ext IN ('skp','easm','eprt','edrw','sldprt','sldasm',"
-              "'dwg','fcstd') AND thumb IN (0,1,4)")
-        db.set_setting("cad_pics", "1")
+              "'dwg','fcstd') AND thumb IN (0,1,2,4)")
+        db.set_setting("cad_pics", "2")
     if db.setting("blend_thumbs") != "3":  # 1.25.11 Blender preview, 1.25.13 cropped to the model (also kind 2)
         db.ex("UPDATE files SET analyzed=0 WHERE missing=0 AND ext='blend' AND thumb IN (0,1,2,4)")
         db.set_setting("blend_thumbs", "3")

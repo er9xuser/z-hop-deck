@@ -2,6 +2,10 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.26.12
+- eDrawings `.easm` / `.eprt` / `.edrw` are ZIP files with a `preview.jpg` inside – that picture is now the thumbnail
+- Previews on a plain or softly graded background (eDrawings' white, camera renders) are cut out and centred like the other thumbnails; Blender window screenshots keep their viewport crop. Affected files are redone once
+
 ## 1.26.11
 - Fix: the upload dialog had its own, older list of file types and silently dropped `.easm`, `.eprt`, `.edrw`, `.sldprt`, `.sldasm` and `.f3z` (a folder with only such files was not uploaded at all). The dialog now uses the server's list, and shows *N files left out – type not supported (…)* instead of dropping them silently
 

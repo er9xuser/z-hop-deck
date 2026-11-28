@@ -292,6 +292,25 @@ def tidy_screenshot_preview(im, out=512):
         h, w = a.shape[:2]
         if h < 24 or w < 24:
             return im
+        # plain background all around (CAD / camera renders, e.g. eDrawings' white): cut the model out of it
+        border = np.concatenate([a[0], a[-1], a[:, 0], a[:, -1]])
+        bgc = np.median(border, axis=0)
+        full = np.abs(a - bgc).max(2)
+        # border (nearly) one colour - soft gradients allowed - and that colour fills a good part of the picture
+        if (np.abs(border - bgc).max(1) <= 32).mean() > 0.85 and (full <= 14).mean() > 0.4:
+            d = full > 40
+            ys, xs = np.nonzero(d)
+            if len(ys) > 30:
+                y0, y1, x0, x1 = ys.min(), ys.max(), xs.min(), xs.max()
+                side = int(max(y1 - y0, x1 - x0) * 1.18) + 4
+                cy, cx = (y0 + y1) // 2, (x0 + x1) // 2
+                rgba = Image.fromarray(a.astype(np.uint8)).convert("RGBA")
+                rgba.putalpha(Image.fromarray((d * 255).astype(np.uint8)).filter(ImageFilter.MinFilter(3)))  # no light fringe
+                sq = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+                sq.alpha_composite(rgba, (int(side // 2 - cx), int(side // 2 - cy)))
+                big = sq.resize((out, out), Image.LANCZOS)
+                big.putalpha(big.getchannel("A").filter(ImageFilter.GaussianBlur(out / 260)))
+                return big
         mid = a[h // 4: 3 * h // 4, w // 4: 3 * w // 4].reshape(-1, 3).astype(np.int64) // 6
         keys, cnt = np.unique(mid[:, 0] * 10000 + mid[:, 1] * 100 + mid[:, 2], return_counts=True)
         k = int(keys[cnt.argmax()])
