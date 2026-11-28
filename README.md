@@ -68,12 +68,13 @@ Your database, previews and settings live in `./data` and are kept. The version 
 | Type | What you get |
 |---|---|
 | STL, OBJ, 3MF | Preview, 3D view, size, volume, estimated filament. 3MF: slicer data, embedded picture, multi-colour view |
-| G-code, `.gcode.3mf` | Slicer picture or rendered toolpath, print time, filament, material, settings, toolpath viewer |
+| G-code, `.gcode.3mf`, `.bgcode` | Slicer picture (PNG / JPG / QOI) or rendered toolpath, print time, filament, material, settings, toolpath viewer |
 | STEP / STP | Converted to a mesh (OpenCASCADE): preview, 3D view, size, *Download STL* |
 | OpenSCAD `.scad` | Rendered with OpenSCAD: preview, 3D view, *Open in slicer*, *Download STL*, code view |
 | ZIP | Extracted on upload (optional) or listed; preview of the largest model |
 | Images, PDF, TXT, Markdown | Shown with the model: photo gallery, PDF viewer, readme |
-| IGES, F3D, Blend, BGCode | Indexed and downloadable, preview from an image in the same folder |
+| Fusion 360 `.f3d` / `.f3z` | Indexed and downloadable, preview picture saved by Fusion |
+| IGES, Blend, SketchUp, … | Indexed and downloadable, preview from an image in the same folder |
 
 ## Requirements
 

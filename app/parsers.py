@@ -157,6 +157,35 @@ def parse_bgcode(path):
     return meta, (thumbs[0][1] if thumbs else None)
 
 
+def f3d_preview(path, _depth=0, _data=None):
+    """Fusion 360 .f3d / .f3z are ZIPs; Fusion stores a picture at FusionAssetName[Active]/Previews/small.png.
+    .f3z holds one or more .f3d inside. Returns a PIL image or None."""
+    try:
+        z = zipfile.ZipFile(io.BytesIO(_data) if _data is not None else path)
+    except (zipfile.BadZipFile, OSError):
+        return None
+    with z:
+        infos = [i for i in z.infolist() if i.file_size > 0 and not i.is_dir()]
+        pics = [i for i in infos if i.filename.lower().endswith((".png", ".jpg", ".jpeg"))
+                and "preview" in i.filename.lower() and i.file_size < 20 * 1024 * 1024]
+        # [Active] design first, then the biggest picture
+        pics.sort(key=lambda i: ("[active]" not in i.filename.lower(), -i.file_size))
+        for i in pics:
+            try:
+                im = Image.open(io.BytesIO(z.read(i)))
+                im.load()
+                return im
+            except Exception:
+                continue
+        if _depth == 0:
+            for i in sorted((i for i in infos if i.filename.lower().endswith(".f3d")), key=lambda i: -i.file_size):
+                if i.file_size < 300 * 1024 * 1024:
+                    im = f3d_preview(None, 1, z.read(i))
+                    if im is not None:
+                        return im
+    return None
+
+
 def extract_gcode_thumbnails(text):
     """Return list of (w*h, PIL.Image) from '; thumbnail begin WxH len' blocks."""
     out = []

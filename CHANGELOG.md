@@ -2,6 +2,9 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.25.8
+- Fusion 360 `.f3d` / `.f3z`: the preview picture Fusion saves inside the file is used as the thumbnail (`.f3z` is now recognised too). Existing files are re-analysed once
+
 ## 1.25.7
 - G-code without an embedded picture now gets a thumbnail: the toolpath (extrusion moves) is drawn like the model, in the sliced filament colour; purge / prime lines are left out. Before, the 3D toolpath view worked but the card stayed empty
 - QOI thumbnails (OrcaSlicer / PrusaSlicer option) are decoded
