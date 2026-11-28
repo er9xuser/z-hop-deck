@@ -2,6 +2,12 @@
 
 Z-Hop Deck (called Layerdeck up to 1.21). The version shown in the app's top-right corner comes from `VERSION` in `app/app.py`. Bump it with every release.
 
+## 1.26.11
+- Fix: the upload dialog had its own, older list of file types and silently dropped `.easm`, `.eprt`, `.edrw`, `.sldprt`, `.sldasm` and `.f3z` (a folder with only such files was not uploaded at all). The dialog now uses the server's list, and shows *N files left out – type not supported (…)* instead of dropping them silently
+
+## 1.26.10
+- Upload: new option *If a file is already there*: **skip it** (default – uploading the same folder again only adds what is new; tags / collection are still applied to the existing files), **replace it** (same library entry, new content, preview redone) or **keep both** (`name (1).stl`, the old behaviour). The choice is remembered
+
 ## 1.26.9
 - eDrawings (`.easm`, `.eprt`, `.edrw`) and SolidWorks (`.sldprt`, `.sldasm`) files are now part of the library (indexed, downloadable)
 - Preview pictures stored inside CAD files are used as thumbnails: SketchUp, eDrawings, SolidWorks, DWG (embedded PNG/JPEG) and FreeCAD (`thumbnails/Thumbnail.png`). No 3D view for these formats. Existing files are re-analysed once

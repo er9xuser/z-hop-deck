@@ -1833,7 +1833,12 @@ function uploadError(x, data) {
   if (x.status === 502 || x.status === 504) return `proxy error ${x.status} – the app did not answer in time (proxy_read_timeout?)`;
   return `HTTP ${x.status} ${x.statusText || ''}`.trim();
 }
-const OK_EXT = /\.(stl|3mf|obj|step|stp|iges|igs|f3d|scad|blend|fcstd|skp|dxf|dwg|gcode|gco|g|bgcode|zip|jpe?g|png|webp|gif|pdf|txt|md)$/i;
+// file types the server accepts (from settings, so new formats work without touching this file)
+const okExt = path => {
+  const n = path.toLowerCase(), e = n.endsWith('.gcode.3mf') ? '3mf' : n.includes('.') ? n.split('.').pop() : '';
+  const list = S.settings?._upload_exts;
+  return list ? list.includes(e) : /^(stl|3mf|obj|step|stp|gcode|zip|png|jpe?g|pdf)$/.test(e);
+};
 function openUpload(initial = []) {
   let files = [];
   // inside an open model folder a new upload goes NEXT to that model, not into it (it would become one of its parts)
@@ -1856,7 +1861,8 @@ function openUpload(initial = []) {
     <div class="grid2"><label class="fld"><span>Tags for uploaded files</span><div id="u-tags"></div></label>
       <label class="fld"><span>Add to collection</span><select id="u-coll"><option value="">—</option>${S.collections.map(c => `<option value="${c.id}" ${curColl && curColl == c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label></div>
     <div class="row wrap" style="gap:18px"><label class="check"><input type="checkbox" id="u-bundle" ${store.get('bundleFolders', true) ? 'checked' : ''}> Each uploaded folder / ZIP is one model</label>
-    <label class="check"><input type="checkbox" id="u-zip" ${store.get('extractZips', true) ? 'checked' : ''}> Extract ZIP archives automatically</label></div>
+    <label class="check"><input type="checkbox" id="u-zip" ${store.get('extractZips', true) ? 'checked' : ''}> Extract ZIP archives automatically</label>
+    <label class="check" style="gap:8px">If a file is already there <select id="u-exist" class="compact">${[['skip', 'skip it'], ['replace', 'replace it'], ['keep', 'keep both']].map(([k, l]) => `<option value="${k}" ${store.get('onExist', 'skip') === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
     <div class="box hidden small" id="u-err" style="border-color:var(--red);color:var(--red);display:flex;flex-direction:column;gap:4px"></div>
     <div class="up-list" id="u-list"></div>`,
     buttons: [{ label: 'Close' }, { label: 'Upload', cls: 'primary', onClick: async ({ el }) => { await run(el); return false; } }] });
@@ -1878,13 +1884,20 @@ function openUpload(initial = []) {
   modelHint();
   const ti = tagInput([], () => { });
   $('#u-tags', el).append(ti.el);
+  let ignored = [];
   const add = list => {
-    for (const it of list) { if (!OK_EXT.test(it.path)) continue; if (!files.some(f => f.path === it.path && f.file.size === it.file.size)) files.push({ ...it, progress: 0, state: '' }); }
+    for (const it of list) {
+      const base = it.path.split('/').pop();
+      if (base.startsWith('.')) continue;  // .DS_Store & co.
+      if (!okExt(it.path)) { ignored.push(it.path); continue; }
+      if (!files.some(f => f.path === it.path && f.file.size === it.file.size)) files.push({ ...it, progress: 0, state: '' });
+    }
     draw();
   };
   const draw = () => {
     const total = files.reduce((a, f) => a + f.file.size, 0);
-    $('#u-list', el).innerHTML = files.length ? `<div class="muted small">${files.length} files · ${fmt.bytes(total)}</div>` + files.map(f => `<div class="up-item"><span class="nm mono" title="${esc(f.path)}">${esc(f.path)}</span><div class="meter"><i style="width:${f.progress * 100}%;background:${f.state === 'err' ? 'var(--red)' : f.state === 'done' ? 'var(--teal)' : 'var(--accent)'}"></i></div><span class="muted small mono" style="text-align:right;${f.state === 'err' ? 'color:var(--red)' : ''}" title="${esc(f.error || '')}">${f.state === 'err' ? 'error' : f.state === 'done' ? '✓' : fmt.bytes(f.file.size)}</span></div>`).join('') : '';
+    const ign = ignored.length ? `<div class="muted small" title="${esc(ignored.slice(0, 40).join('\n'))}">${ignored.length} file${ignored.length === 1 ? '' : 's'} left out – type not supported (${esc([...new Set(ignored.map(p => p.split('.').pop().toLowerCase()))].slice(0, 6).join(', '))})</div>` : '';
+    $('#u-list', el).innerHTML = ign + (files.length ? `<div class="muted small">${files.length} files · ${fmt.bytes(total)}</div>` + files.map(f => `<div class="up-item"><span class="nm mono" title="${esc(f.path)}">${esc(f.path)}</span><div class="meter"><i style="width:${f.progress * 100}%;background:${f.state === 'err' ? 'var(--red)' : f.state === 'done' ? 'var(--teal)' : 'var(--accent)'}"></i></div><span class="muted small mono" style="text-align:right;${f.state === 'err' ? 'color:var(--red)' : ''}" title="${esc(f.error || '')}">${f.state === 'err' ? 'error' : f.state === 'done' ? (f.note ? 'already there' : '✓') : fmt.bytes(f.file.size)}</span></div>`).join('') : '');
   };
   const dz = $('#dz', el);
   $('#pick-files', el).onclick = e => { e.preventDefault(); $('#in-files', el).click(); };
@@ -1905,16 +1918,17 @@ function openUpload(initial = []) {
     running = true;
     store.set('extractZips', $('#u-zip', el).checked);
     store.set('bundleFolders', $('#u-bundle', el).checked);
+    const onExist = $('#u-exist', el).value; store.set('onExist', onExist);
     const bundleF = $('#u-bundle', el).checked ? '1' : '0';
     const [root, folder] = $('#u-folder', el).value.split('|');
     const sub = $('#u-sub', el).value.trim().replace(/^\/+|\/+$/g, '');
     const dest = [folder, sub].filter(Boolean).join('/');
     const tags = ti.value().join(','), coll = $('#u-coll', el).value, zip = $('#u-zip', el).checked ? '1' : '0';
-    let ok = 0, bad = 0;
+    let ok = 0, bad = 0, same = 0;
     const errors = [];
     const one = f => new Promise(res => {
       const fd = new FormData();
-      fd.append('root', root); fd.append('folder', dest); fd.append('tags', tags); fd.append('collection', coll); fd.append('extract_zips', zip); fd.append('bundle_folders', bundleF);
+      fd.append('root', root); fd.append('folder', dest); fd.append('tags', tags); fd.append('collection', coll); fd.append('extract_zips', zip); fd.append('bundle_folders', bundleF); fd.append('on_exist', onExist);
       fd.append('files', f.file, f.path);
       const x = new XMLHttpRequest();
       x.open('POST', '/api/upload');
@@ -1923,7 +1937,8 @@ function openUpload(initial = []) {
         let data = null; try { data = JSON.parse(x.responseText); } catch { }
         f.progress = 1;
         if (x.status < 300 && data && !data.errors?.length) {
-          if (!data.saved?.length && data.skipped?.length) { f.state = 'err'; f.error = 'file type not supported'; bad++; }
+          if (data.existing?.length) { f.state = 'done'; f.note = 'already there – skipped'; same++; }
+          else if (!data.saved?.length && data.skipped?.length) { f.state = 'err'; f.error = 'file type not supported'; bad++; }
           else { f.state = 'done'; ok++; }
         } else {
           f.state = 'err'; bad++;
@@ -1938,7 +1953,7 @@ function openUpload(initial = []) {
     const queue = [...todo];
     await Promise.all([0, 1, 2].map(async () => { while (queue.length) await one(queue.shift()); }));
     running = false;
-    toast(`Uploaded ${ok} file${ok === 1 ? '' : 's'}${bad ? `, ${bad} failed` : ''}${ok ? ' – previews are being generated' : ''}`, bad ? 'err' : 'ok');
+    toast(`Uploaded ${ok} file${ok === 1 ? '' : 's'}${same ? `, ${same} already there (skipped)` : ''}${bad ? `, ${bad} failed` : ''}${ok ? ' – previews are being generated' : ''}`, bad ? 'err' : 'ok');
     if (errors.length) {
       const uniq = [...new Set(errors.map(e => e.replace(/^[^:]*: /, '')))];
       $('#u-err', el).innerHTML = `<b>Upload problem</b>${uniq.slice(0, 4).map(e => `<div>${esc(e)}</div>`).join('')}`;

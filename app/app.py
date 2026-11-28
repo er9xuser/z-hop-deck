@@ -34,7 +34,7 @@ logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"),
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("zhopdeck")
 
-VERSION = "1.26.9"  # bump on every release - shown in the UI
+VERSION = "1.26.11"  # bump on every release - shown in the UI
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "4096"))
 STATUSES = ["none", "want", "queued", "printing", "printed", "failed"]
@@ -1001,7 +1001,8 @@ def upload():
     bundle_folders = request.form.get("bundle_folders", "1") == "1"
     tag_names = [t for t in (request.form.get("tags") or "").split(",") if t.strip()]
     coll = num(request.form.get("collection"), None, int)
-    saved, skipped, ids, errors = [], [], [], []
+    on_exist = request.form.get("on_exist") or "keep"  # skip | replace | keep (old clients: keep both)
+    saved, skipped, ids, errors, existing = [], [], [], [], []
     for up in request.files.getlist("files"):
         raw = (up.filename or "").replace("\\", "/")
         try:
@@ -1014,8 +1015,21 @@ def upload():
                 continue
             target = lib.safe_join(base, "/".join(parts))
             os.makedirs(os.path.dirname(target), exist_ok=True)
-            target = lib.unique_path(target)
-            up.save(target)
+            if os.path.exists(target) and on_exist == "skip":  # same folder uploaded again: keep what is there
+                existing.append(raw)
+                fid_old = db.q1("SELECT id FROM files WHERE path=? AND missing=0", (os.path.normpath(target),))
+                if fid_old and coll:  # still honour "add to collection" / tags for files that are already there
+                    db.ex("INSERT OR IGNORE INTO collection_files(collection_id, file_id) VALUES (?,?)", (coll, fid_old["id"]))
+                if fid_old and tag_names:
+                    set_tags(fid_old["id"], tag_names, "add")
+                continue
+            if on_exist == "replace" and os.path.exists(target):
+                tmp = target + ".zhd-upload"
+                up.save(tmp)
+                os.replace(tmp, target)  # same path -> same library entry, new content (preview is redone)
+            else:
+                target = lib.unique_path(target)
+                up.save(target)
             if bundle_folders and len(parts) > 1:  # uploaded as part of a folder -> that folder is one model
                 lib.create_bundle(root, os.path.relpath(os.path.join(base, parts[0]), root))
             if e == "zip" and extract_zips:
@@ -1054,7 +1068,7 @@ def upload():
             errors.append(f"{raw}: internal error - see the server log")
     if ids:
         lib.request_analyze(ids)
-    out = {"saved": saved, "skipped": skipped, "ids": ids, "errors": errors}
+    out = {"saved": saved, "skipped": skipped, "ids": ids, "errors": errors, "existing": existing}
     if errors and not saved:
         out["error"] = errors[0]
         return jsonify(out), 500
@@ -2068,6 +2082,7 @@ def get_settings():
     s["_max_upload_mb"] = MAX_UPLOAD_MB
     s["_openscad"] = bool(lib.OPENSCAD)
     s["_step"] = lib.STEP_OK
+    s["_upload_exts"] = sorted(set(lib.KINDS) | ATTACH_EXTS)  # the upload dialog filters with the same list
     s["PUBLIC_URL_EFFECTIVE"] = PUBLIC_URL or request.host_url.rstrip("/")
     trash = 0
     for fn in os.listdir(lib.TRASH_DIR):
